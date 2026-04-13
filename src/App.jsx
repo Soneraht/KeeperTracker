@@ -467,14 +467,30 @@ function ArrivalModal({ rawAddress, knownEntry, onDone, onCancel }) {
         </div>
         <div className="btn-row">
           <button className="btn btn-primary" onClick={() => {
-            let addr = rawAddress;
-            if (editedNumber) {
-              addr = rawAddress.replace(/(\S+)\s+\d+(\s*,)/, `$1 ${editedNumber}$2`);
-              if (addr === rawAddress) addr = rawAddress.replace(/\s+\d+$/, ` ${editedNumber}`);
-              if (addr === rawAddress) addr = `${rawAddress} ${editedNumber}`;
-            }
-            setFinalAddress(addr); setStep("name");
-          }}>ΕΠΟΜΕΝΟ →</button>
+  let addr = rawAddress;
+  if (editedNumber) {
+    // Περίπτωση 1: υπάρχει ήδη αριθμός πριν το κόμμα → αντικατάστασέ τον
+    // π.χ. "Κωνσταντίνου Παλαιολόγου 12, Δήμος..." → "Κωνσταντίνου Παλαιολόγου 80, Δήμος..."
+    if (/\d+\s*,/.test(rawAddress)) {
+      addr = rawAddress.replace(/\d+(\s*,)/, `${editedNumber}$1`);
+    }
+    // Περίπτωση 2: χωρίς αριθμό, υπάρχει κόμμα → βάλε αριθμό πριν το κόμμα
+    // π.χ. "Κωνσταντίνου Παλαιολόγου, Δήμος..." → "Κωνσταντίνου Παλαιολόγου 80, Δήμος..."
+    else if (rawAddress.includes(",")) {
+      addr = rawAddress.replace(",", ` ${editedNumber},`);
+    }
+    // Περίπτωση 3: αριθμός στο τέλος χωρίς κόμμα → αντικατάστασέ τον
+    // π.χ. "Κωνσταντίνου Παλαιολόγου 12" → "Κωνσταντίνου Παλαιολόγου 80"
+    else if (/\s+\d+$/.test(rawAddress)) {
+      addr = rawAddress.replace(/\s+\d+$/, ` ${editedNumber}`);
+    }
+    // Περίπτωση 4: δεν υπάρχει τίποτα → append
+    else {
+      addr = `${rawAddress} ${editedNumber}`;
+    }
+  }
+  setFinalAddress(addr); setStep("name");
+}}>ΕΠΟΜΕΝΟ →</button>
           <button className="btn btn-secondary" onClick={() => setStep("confirm_address")}>ΠΙΣΩ</button>
         </div>
       </div></div>
