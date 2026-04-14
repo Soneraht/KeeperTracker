@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import * as XLSX from "xlsx";
+import { db, collection, doc, setDoc, deleteDoc, onSnapshot } from "./firebase";
 
 const theme = {
   bg: "#0a0f1e",
@@ -324,6 +325,19 @@ const css = `
   }
   .live-open-btn:hover { background: ${theme.surfaceAlt}; }
 
+  .sync-indicator {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 11px; color: ${theme.textMuted};
+  }
+  .sync-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: ${theme.success};
+  }
+  .sync-dot.syncing {
+    background: ${theme.warning};
+    animation: pulse 1s ease-in-out infinite;
+  }
+
   .help-section { margin-bottom: 20px; }
   .help-section-title {
     font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 700;
@@ -340,6 +354,19 @@ const css = `
   .help-item-text strong { color: ${theme.accent}; display: block; font-size: 13px; margin-bottom: 2px; }
   .help-item-text span { color: ${theme.textMuted}; font-size: 12px; }
 `;
+
+// ─── Helpers ──────────────────────────────────────────────────────
+const saveRoute = (route) =>
+  setDoc(doc(db, "routes", String(route.id)), route);
+
+const saveLocation = (key, val) =>
+  setDoc(doc(db, "locations", key.replace(/\./g, "_")), val);
+
+const saveFuelEntry = (entry) =>
+  setDoc(doc(db, "fuels", String(entry.id)), entry);
+
+const saveProfile = (profile) =>
+  setDoc(doc(db, "profile", "driver"), profile);
 
 // ─── Live View ────────────────────────────────────────────────────
 function LiveView({ address }) {
@@ -370,13 +397,13 @@ function HelpModal({ onClose }) {
           <div className="help-item"><span className="help-item-icon">🏠</span><div className="help-item-text"><strong>Έναρξη από Έδρα</strong><span>Ξεκινά νέα διαδρομή από την αποθηκευμένη διεύθυνση έδρας σου</span></div></div>
           <div className="help-item"><span className="help-item-icon">📍</span><div className="help-item-text"><strong>Έναρξη από GPS</strong><span>Εντοπίζει αυτόματα την τρέχουσα τοποθεσία σου ως σημείο εκκίνησης</span></div></div>
           <div className="help-item"><span className="help-item-icon">✅</span><div className="help-item-text"><strong>Καταγραφή Άφιξης</strong><span>Όταν φτάσεις, πατάς το κουμπί — βρίσκει τη διεύθυνση μέσω GPS και ζητά επιβεβαίωση και όνομα πελάτη</span></div></div>
-          <div className="help-item"><span className="help-item-icon">🔁</span><div className="help-item-text"><strong>Γνωστοί Προορισμοί</strong><span>Αν έχεις ξαναπάει σε μια διεύθυνση, την αναγνωρίζει αυτόματα και προτείνει το αποθηκευμένο όνομα</span></div></div>
+          <div className="help-item"><span className="help-item-icon">🔁</span><div className="help-item-text"><strong>Γνωστοί Προορισμοί</strong><span>Αν έχεις ξαναπάει σε μια διεύθυνση, την αναγνωρίζει αυτόματα</span></div></div>
         </div>
         <div className="help-section">
           <div className="help-section-title">📋 ΙΣΤΟΡΙΚΟ</div>
-          <div className="help-item"><span className="help-item-icon">🗺️</span><div className="help-item-text"><strong>Live View</strong><span>Εμφανίζει χάρτη Google Maps με την τελευταία καταχωρημένη διεύθυνση άφιξης</span></div></div>
-          <div className="help-item"><span className="help-item-icon">✏️</span><div className="help-item-text"><strong>Επεξεργασία</strong><span>Αλλαγή ονόματος πελάτη ή διεύθυνσης σε κάθε καταχώρηση — ενημερώνει αυτόματα και τους αποθηκευμένους προορισμούς</span></div></div>
-          <div className="help-item"><span className="help-item-icon">🗑️</span><div className="help-item-text"><strong>Διαγραφή</strong><span>Αφαίρεση λανθασμένης καταχώρησης</span></div></div>
+          <div className="help-item"><span className="help-item-icon">☁️</span><div className="help-item-text"><strong>Cloud Sync</strong><span>Όλα τα δεδομένα αποθηκεύονται στο Firebase και είναι ορατά από οποιαδήποτε συσκευή σε real-time</span></div></div>
+          <div className="help-item"><span className="help-item-icon">✏️</span><div className="help-item-text"><strong>Επεξεργασία</strong><span>Αλλαγή ονόματος πελάτη ή διεύθυνσης — ενημερώνεται αυτόματα στο cloud</span></div></div>
+          <div className="help-item"><span className="help-item-icon">🗑️</span><div className="help-item-text"><strong>Διαγραφή</strong><span>Αφαίρεση καταχώρησης από όλες τις συσκευές</span></div></div>
           <div className="help-item"><span className="help-item-icon">📥</span><div className="help-item-text"><strong>Export Excel</strong><span>Εξαγωγή όλων των διαδρομών της ημέρας σε .xlsx αρχείο</span></div></div>
         </div>
         <div className="help-section">
@@ -385,13 +412,12 @@ function HelpModal({ onClose }) {
         </div>
         <div className="help-section">
           <div className="help-section-title">⛽ ΚΑΥΣΙΜΑ</div>
-          <div className="help-item"><span className="help-item-icon">➕</span><div className="help-item-text"><strong>Νέος Ανεφοδιασμός</strong><span>Καταγραφή λίτρων, κόστους και χιλιομέτρων — εμφανίζει σύνολα αυτόματα</span></div></div>
+          <div className="help-item"><span className="help-item-icon">➕</span><div className="help-item-text"><strong>Νέος Ανεφοδιασμός</strong><span>Καταγραφή λίτρων, κόστους και χιλιομέτρων — αποθηκεύεται στο cloud</span></div></div>
         </div>
         <div className="help-section">
           <div className="help-section-title">👤 ΠΡΟΦΙΛ</div>
-          <div className="help-item"><span className="help-item-icon">💾</span><div className="help-item-text"><strong>Αυτόματη Αποθήκευση</strong><span>Τα στοιχεία σου αποθηκεύονται αυτόματα και παραμένουν μεταξύ συνεδριών</span></div></div>
-          <div className="help-item"><span className="help-item-icon">📌</span><div className="help-item-text"><strong>Αποθηκευμένοι Προορισμοί</strong><span>Διαχείριση γνωστών διευθύνσεων — επεξεργασία ή διαγραφή</span></div></div>
-          <div className="help-item"><span className="help-item-icon">📵</span><div className="help-item-text"><strong>Κλείδωμα Οθόνης</strong><span>Κατά τη διάρκεια διαδρομής, η εφαρμογή κρατά την οθόνη ενεργή αυτόματα (iOS 16.4+ / Android)</span></div></div>
+          <div className="help-item"><span className="help-item-icon">☁️</span><div className="help-item-text"><strong>Cloud Αποθήκευση</strong><span>Τα στοιχεία οδηγού και οι αποθηκευμένοι προορισμοί συγχρονίζονται αυτόματα</span></div></div>
+          <div className="help-item"><span className="help-item-icon">📵</span><div className="help-item-text"><strong>Κλείδωμα Οθόνης</strong><span>Κατά τη διάρκεια διαδρομής, η εφαρμογή κρατά την οθόνη ενεργή αυτόματα</span></div></div>
         </div>
         <button className="btn btn-secondary" style={{ marginBottom: 0, marginTop: 6 }} onClick={onClose}>ΚΛΕΙΣΙΜΟ</button>
       </div>
@@ -476,15 +502,10 @@ function ArrivalModal({ rawAddress, knownEntry, onDone, onCancel }) {
           <button className="btn btn-primary" onClick={() => {
             let addr = rawAddress;
             if (editedNumber) {
-              if (/\d+\s*,/.test(rawAddress)) {
-                addr = rawAddress.replace(/\d+(\s*,)/, `${editedNumber}$1`);
-              } else if (rawAddress.includes(",")) {
-                addr = rawAddress.replace(",", ` ${editedNumber},`);
-              } else if (/\s+\d+$/.test(rawAddress)) {
-                addr = rawAddress.replace(/\s+\d+$/, ` ${editedNumber}`);
-              } else {
-                addr = `${rawAddress} ${editedNumber}`;
-              }
+              if (/\d+\s*,/.test(rawAddress)) addr = rawAddress.replace(/\d+(\s*,)/, `${editedNumber}$1`);
+              else if (rawAddress.includes(",")) addr = rawAddress.replace(",", ` ${editedNumber},`);
+              else if (/\s+\d+$/.test(rawAddress)) addr = rawAddress.replace(/\s+\d+$/, ` ${editedNumber}`);
+              else addr = `${rawAddress} ${editedNumber}`;
             }
             setFinalAddress(addr); setStep("name");
           }}>ΕΠΟΜΕΝΟ →</button>
@@ -535,6 +556,7 @@ export default function App() {
   const todayKey = new Date().toLocaleDateString("el-GR");
   const [tab, setTab] = useState("record");
   const [showHelp, setShowHelp] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [profile, setProfile] = useState({ firstName: "", lastName: "", plate: "", startKm: "", baseAddress: "" });
   const [routes, setRoutes] = useState([]);
   const [allRoutes, setAllRoutes] = useState([]);
@@ -570,27 +592,41 @@ export default function App() {
     return () => document.removeEventListener("visibilitychange", handleVisibility);
   }, [activeRoute]);
 
+  // ─── Real-time listeners από Firestore ───────────────────────
   useEffect(() => {
-    const savedDate = localStorage.getItem("kt_date");
-    const savedProfile = localStorage.getItem("kt_profile");
-    if (savedProfile) setProfile(JSON.parse(savedProfile));
-    setLocations(JSON.parse(localStorage.getItem("kt_locations") || "{}"));
-    setAllRoutes(JSON.parse(localStorage.getItem("kt_allRoutes") || "[]"));
-    setFuels(JSON.parse(localStorage.getItem("kt_fuels") || "[]"));
-    if (savedDate !== todayKey) {
-      setRoutes([]); localStorage.setItem("kt_date", todayKey);
-    } else {
-      setRoutes(JSON.parse(localStorage.getItem("kt_routes") || "[]"));
-    }
+    const unsubRoutes = onSnapshot(collection(db, "routes"), (snap) => {
+      const data = snap.docs.map((d) => d.data()).sort((a, b) => a.start.timestamp - b.start.timestamp);
+      setAllRoutes(data);
+      setRoutes(data.filter((r) => {
+        const d = new Date(r.start.timestamp);
+        return d.toLocaleDateString("el-GR") === todayKey;
+      }));
+    });
+
+    const unsubLocations = onSnapshot(collection(db, "locations"), (snap) => {
+      const data = {};
+      snap.docs.forEach((d) => { data[d.id] = d.data(); });
+      setLocations(data);
+    });
+
+    const unsubFuels = onSnapshot(collection(db, "fuels"), (snap) => {
+      const data = snap.docs.map((d) => d.data()).sort((a, b) => b.id - a.id);
+      setFuels(data);
+    });
+
+    const unsubProfile = onSnapshot(collection(db, "profile"), (snap) => {
+      const driver = snap.docs.find((d) => d.id === "driver");
+      if (driver) setProfile(driver.data());
+    });
+
+    return () => { unsubRoutes(); unsubLocations(); unsubFuels(); unsubProfile(); };
   }, []);
 
-  useEffect(() => { localStorage.setItem("kt_profile", JSON.stringify(profile)); }, [profile]);
+  // ─── Profile αποθήκευση με debounce ──────────────────────────
   useEffect(() => {
-    localStorage.setItem("kt_routes", JSON.stringify(routes));
-    localStorage.setItem("kt_allRoutes", JSON.stringify(allRoutes));
-    localStorage.setItem("kt_locations", JSON.stringify(locations));
-    localStorage.setItem("kt_fuels", JSON.stringify(fuels));
-  }, [routes, allRoutes, locations, fuels]);
+    const t = setTimeout(() => { saveProfile(profile); }, 800);
+    return () => clearTimeout(t);
+  }, [profile]);
 
   const getCoords = () => new Promise((resolve) => {
     navigator.geolocation.getCurrentPosition(
@@ -611,7 +647,7 @@ export default function App() {
     } catch { return `${lat.toFixed(5)}, ${lon.toFixed(5)}`; }
   };
 
-  const gpsKey = (lat, lon) => `${parseFloat(lat).toFixed(3)},${parseFloat(lon).toFixed(3)}`;
+  const gpsKey = (lat, lon) => `${parseFloat(lat).toFixed(3)}_${parseFloat(lon).toFixed(3)}`;
 
   const startFromBase = async () => {
     await requestWakeLock();
@@ -633,32 +669,50 @@ export default function App() {
     setArrivalData({ rawAddress, key, knownEntry: key && locations[key] ? locations[key] : null });
   };
 
-  const handleArrivalDone = (finalAddress, clientName) => {
+  const handleArrivalDone = async (finalAddress, clientName) => {
     if (!activeRoute) return;
-    if (arrivalData.key) setLocations((prev) => ({ ...prev, [arrivalData.key]: { address: finalAddress, name: clientName } }));
+    setSyncing(true);
+    if (arrivalData.key) await saveLocation(arrivalData.key, { address: finalAddress, name: clientName });
     const completed = { ...activeRoute, gpsKey: arrivalData.key, end: { location: finalAddress, time: now(), label: clientName, timestamp: Date.now() } };
-    setRoutes((r) => [...r, completed]);
-    setAllRoutes((r) => [...r, completed]);
+    await saveRoute(completed);
+    setSyncing(false);
     setActiveRoute(null); setArrivalData(null);
     releaseWakeLock();
   };
 
-  const handleEditSave = (updatedRoute) => {
-    setRoutes((r) => r.map((x) => x.id === updatedRoute.id ? updatedRoute : x));
-    setAllRoutes((r) => r.map((x) => x.id === updatedRoute.id ? updatedRoute : x));
-    const original = routes.find((x) => x.id === updatedRoute.id);
-    if (original?.gpsKey) {
-      setLocations((prev) => ({ ...prev, [original.gpsKey]: { address: updatedRoute.end.location, name: updatedRoute.end.label } }));
-    }
+  const handleEditSave = async (updatedRoute) => {
+    setSyncing(true);
+    await saveRoute(updatedRoute);
+    if (updatedRoute.gpsKey) await saveLocation(updatedRoute.gpsKey, { address: updatedRoute.end.location, name: updatedRoute.end.label });
+    setSyncing(false);
     setEditingRoute(null);
   };
 
-  const handleDelete = (id) => {
-    setRoutes((r) => r.filter((x) => x.id !== id));
-    setAllRoutes((r) => r.filter((x) => x.id !== id));
+  const handleDelete = async (id) => {
+    setSyncing(true);
+    await deleteDoc(doc(db, "routes", String(id)));
+    setSyncing(false);
   };
 
-  const saveFuel = (form) => { setFuels((f) => [...f, { id: Date.now(), ...form, date: todayKey }]); setShowFuel(false); };
+  const saveFuel = async (form) => {
+    const entry = { id: Date.now(), ...form, date: todayKey };
+    setSyncing(true);
+    await saveFuelEntry(entry);
+    setSyncing(false);
+    setShowFuel(false);
+  };
+
+  const deleteFuel = async (id) => {
+    setSyncing(true);
+    await deleteDoc(doc(db, "fuels", String(id)));
+    setSyncing(false);
+  };
+
+  const deleteLocation = async (key) => {
+    setSyncing(true);
+    await deleteDoc(doc(db, "locations", key));
+    setSyncing(false);
+  };
 
   const exportExcel = () => {
     let totalTime = 0;
@@ -675,7 +729,7 @@ export default function App() {
   };
 
   const applyFilters = (list) => list.filter((r) => {
-    const date = new Date(r.start?.timestamp || new Date(r.start.time).getTime());
+    const date = new Date(r.start?.timestamp || 0);
     const matchClient = filters.client ? (r.end?.label || "").toLowerCase().includes(filters.client.toLowerCase()) : true;
     const matchMonth = filters.month ? date.getMonth() + 1 === Number(filters.month) : true;
     const matchYear = filters.year ? date.getFullYear() === Number(filters.year) : true;
@@ -709,7 +763,13 @@ export default function App() {
         <div className="header">
           <div className="header-inner">
             <span className="logo">Keeper Tracker<span className="logo-beta">beta</span></span>
-            <button className="help-btn" onClick={() => setShowHelp(true)}>?</button>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <div className="sync-indicator">
+                <div className={`sync-dot ${syncing ? "syncing" : ""}`} />
+                <span>{syncing ? "Sync..." : "Cloud"}</span>
+              </div>
+              <button className="help-btn" onClick={() => setShowHelp(true)}>?</button>
+            </div>
           </div>
         </div>
 
@@ -892,9 +952,7 @@ export default function App() {
                           <td>{f.liters}L</td>
                           <td style={{ color: "#38bdf8" }}>{f.amount}€</td>
                           <td style={{ color: "#8899b0" }}>{f.km || "—"}</td>
-                          <td>
-                            <button className="icon-btn icon-btn-del" onClick={() => { if (window.confirm("Διαγραφή;")) setFuels((fls) => fls.filter((x) => x.id !== f.id)); }}>🗑️</button>
-                          </td>
+                          <td><button className="icon-btn icon-btn-del" onClick={() => { if (window.confirm("Διαγραφή;")) deleteFuel(f.id); }}>🗑️</button></td>
                         </tr>
                       ))}
                     </tbody>
@@ -936,9 +994,9 @@ export default function App() {
                         <button className="icon-btn icon-btn-edit" onClick={() => {
                           const newName = prompt("Νέο όνομα:", val.name);
                           const newAddr = prompt("Νέα διεύθυνση:", val.address);
-                          if (newName !== null || newAddr !== null) setLocations((prev) => ({ ...prev, [key]: { name: newName ?? val.name, address: newAddr ?? val.address } }));
+                          if (newName !== null || newAddr !== null) saveLocation(key, { name: newName ?? val.name, address: newAddr ?? val.address });
                         }}>✏️</button>
-                        <button className="icon-btn icon-btn-del" onClick={() => { const upd = { ...locations }; delete upd[key]; setLocations(upd); }}>🗑️</button>
+                        <button className="icon-btn icon-btn-del" onClick={() => { if (window.confirm("Διαγραφή προορισμού;")) deleteLocation(key); }}>🗑️</button>
                       </div>
                     </div>
                   ))}
