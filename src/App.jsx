@@ -286,7 +286,7 @@ function ArrivalModal({ rawAddress, knownEntry, onDone, onCancel }) {
 
 // ─── FuelModal ────────────────────────────────────────────────────
 function FuelModal({ onSave, onCancel }) {
-  const [form, setForm] = useState({liters:"",amount:"",km:""});
+  const [form, setForm] = useState({liters:"",amount:"",km:"",receipt:""});
   return (
     <div className="overlay" onClick={onCancel}>
       <div className="modal" onClick={e=>e.stopPropagation()}>
@@ -294,6 +294,7 @@ function FuelModal({ onSave, onCancel }) {
         <div className="input-group"><label className="input-label">Λίτρα</label><input className="input" type="number" placeholder="45.5" value={form.liters} onChange={e=>setForm({...form,liters:e.target.value})}/></div>
         <div className="input-group"><label className="input-label">Ποσό (€)</label><input className="input" type="number" placeholder="82.00" value={form.amount} onChange={e=>setForm({...form,amount:e.target.value})}/></div>
         <div className="input-group"><label className="input-label">Χιλιόμετρα (προαιρετικό)</label><input className="input" type="number" placeholder="125450" value={form.km} onChange={e=>setForm({...form,km:e.target.value})}/></div>
+        <div className="input-group"><label className="input-label">Αρ. Παραστατικού (προαιρετικό)</label><input className="input" type="text" placeholder="π.χ. ΑΑ-12345" value={form.receipt} onChange={e=>setForm({...form,receipt:e.target.value})}/></div>
         <div className="btn-row">
           <button className="btn btn-primary" style={{marginBottom:0}} onClick={()=>{if(form.liters&&form.amount)onSave(form);}}>ΑΠΟΘΗΚΕΥΣΗ</button>
           <button className="btn btn-secondary" style={{marginBottom:0}} onClick={onCancel}>ΑΚΥΡΟ</button>
@@ -426,6 +427,19 @@ export default function App() {
     const coords   = await getCoords();
     const location = coords ? await reverseGeocode(coords.lat,coords.lon) : "Άγνωστη τοποθεσία";
     setActiveRoute({id:Date.now(), fromBase:false, start:{location, time:now(), timestamp:Date.now()}});
+  };
+
+  const continueFromLast = async () => {
+    const lastRoute = [...routes].reverse().find(r => r.end?.location);
+    if (!lastRoute) return;
+    await requestWakeLock();
+    const newRoute = {
+      id: Date.now(),
+      fromBase: false,
+      start: { location: lastRoute.end.location, time: now(), timestamp: Date.now() }
+    };
+    setActiveRoute(newRoute);
+    await saveRoute(newRoute);
   };
 
   const endRoute = async () => {
@@ -589,6 +603,10 @@ export default function App() {
                   <div className="card-title">ΝΕΑ ΔΙΑΔΡΟΜΗ</div>
                   <button className="btn btn-primary"   onClick={startFromBase}>🏠 &nbsp;ΕΝΑΡΞΗ ΑΠΟ ΕΔΡΑ</button>
                   <button className="btn btn-secondary" onClick={startFromGPS}>📍 &nbsp;ΕΝΑΡΞΗ ΑΠΟ GPS</button>
+                  <button className="btn btn-secondary" onClick={continueFromLast}
+                    disabled={![...routes].reverse().find(r=>r.end?.location)}>
+                    🔁 &nbsp;ΕΠΟΜΕΝΗ ΣΤΑΣΗ
+                  </button>
                 </div>
               )}
               <div className="card">
@@ -701,10 +719,11 @@ export default function App() {
                 ) : (
                   <table className="route-table">
                     <thead><tr>
-                      <th style={{width:"28%"}}>ΗΜ/ΝΙΑ</th>
-                      <th style={{width:"20%"}}>ΛΙΤΡΑ</th>
-                      <th style={{width:"20%"}}>ΠΟΣΟ</th>
-                      <th style={{width:"20%"}}>ΧΛΜ</th>
+                      <th style={{width:"22%"}}>ΗΜ/ΝΙΑ</th>
+                      <th style={{width:"14%"}}>ΛΙΤΡΑ</th>
+                      <th style={{width:"14%"}}>ΠΟΣΟ</th>
+                      <th style={{width:"14%"}}>ΧΛΜ</th>
+                      <th style={{width:"24%"}}>ΠΑΡΑΣΤΑΤΙΚΟ</th>
                       <th style={{width:"12%"}}></th>
                     </tr></thead>
                     <tbody>{fuels.map(f=>(
@@ -713,6 +732,7 @@ export default function App() {
                         <td>{f.liters}L</td>
                         <td style={{color:"#38bdf8"}}>{f.amount}€</td>
                         <td style={{color:"#8899b0"}}>{f.km||"—"}</td>
+                        <td style={{color:"#8899b0",fontSize:11}}>{f.receipt||"—"}</td>
                         <td><button className="icon-btn icon-btn-del" onClick={()=>{if(window.confirm("Διαγραφή;"))deleteFuel(f.id);}}>🗑️</button></td>
                       </tr>
                     ))}</tbody>
@@ -741,25 +761,44 @@ export default function App() {
                 <div className="card-title">ΕΔΡΑ</div>
                 <div className="input-group"><label className="input-label">Διεύθυνση Έδρας</label><input className="input" placeholder="Αθήνα, Ελλάδα" value={profile.baseAddress||""} onChange={e=>setProfile({...profile,baseAddress:e.target.value})}/></div>
               </div>
-              {Object.keys(locations).length>0 && (
-                <div className="card">
-                  <div className="card-title">ΑΠΟΘΗΚΕΥΜΕΝΟΙ ΠΡΟΟΡΙΣΜΟΙ</div>
-                  {Object.entries(locations).map(([key,val])=>(
-                    <div key={key} className="loc-row">
-                      <div style={{flex:1,minWidth:0,marginRight:8}}>
-                        <div style={{fontSize:13,fontWeight:600,color:"#e8edf5",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{val.name}</div>
-                        <div style={{fontSize:11,color:"#8899b0",marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{val.address}</div>
-                      </div>
-                      <div className="action-btns">
-                        <button className="icon-btn icon-btn-edit" onClick={()=>{
-                          const newName=prompt("Νέο όνομα:",val.name);
-                          const newAddr=prompt("Νέα διεύθυνση:",val.address);
-                          if(newName!==null||newAddr!==null) saveLocation(key,{name:newName??val.name,address:newAddr??val.address});
-                        }}>✏️</button>
-                        <button className="icon-btn icon-btn-del" onClick={()=>{if(window.confirm("Διαγραφή προορισμού;"))deleteLocation(key);}}>🗑️</button>
-                      </div>
+              {Object.keys(locations).length >= 0 && (
+                <div className="card" style={{padding:0,overflow:"hidden"}}>
+                  <details>
+                    <summary style={{
+                      cursor:"pointer", fontFamily:"Syne,sans-serif", fontSize:12,
+                      fontWeight:700, textTransform:"uppercase", letterSpacing:"1px",
+                      color:"#8899b0", padding:"14px 18px", listStyle:"none",
+                      display:"flex", justifyContent:"space-between", alignItems:"center",
+                      borderBottom: Object.keys(locations).length>0 ? "1px solid #1e3a5f" : "none"
+                    }}>
+                      <span>📍 ΑΠΟΘΗΚΕΥΜΕΝΟΙ ΠΡΟΟΡΙΣΜΟΙ</span>
+                      <span style={{fontWeight:400,fontSize:11}}>({Object.keys(locations).length})</span>
+                    </summary>
+                    <div style={{padding:"0 18px"}}>
+                      {Object.keys(locations).length===0 ? (
+                        <div className="empty" style={{padding:"20px 0"}}>Κανένας αποθηκευμένος προορισμός</div>
+                      ) : (
+                        Object.entries(locations)
+                          .sort((a,b)=>(a[1].name||"").localeCompare(b[1].name||"","el"))
+                          .map(([key,val])=>(
+                            <div key={key} className="loc-row">
+                              <div style={{flex:1,minWidth:0,marginRight:8}}>
+                                <div style={{fontSize:13,fontWeight:600,color:"#e8edf5",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{val.name}</div>
+                                <div style={{fontSize:11,color:"#8899b0",marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{val.address}</div>
+                              </div>
+                              <div className="action-btns">
+                                <button className="icon-btn icon-btn-edit" onClick={()=>{
+                                  const newName=prompt("Νέο όνομα:",val.name);
+                                  const newAddr=prompt("Νέα διεύθυνση:",val.address);
+                                  if(newName!==null||newAddr!==null) saveLocation(key,{name:newName??val.name,address:newAddr??val.address});
+                                }}>✏️</button>
+                                <button className="icon-btn icon-btn-del" onClick={()=>{if(window.confirm("Διαγραφή προορισμού;"))deleteLocation(key);}}>🗑️</button>
+                              </div>
+                            </div>
+                          ))
+                      )}
                     </div>
-                  ))}
+                  </details>
                 </div>
               )}
             </div>
