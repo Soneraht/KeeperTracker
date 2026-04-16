@@ -408,9 +408,12 @@ export default function App() {
       setFuels(snap.docs.map(d=>d.data()).sort((a,b)=>b.id-a.id));
     });
     const unsubProfile = onSnapshot(collection(db,"profile"), (snap) => {
-      const driver = snap.docs.find(d=>d.id==="driver");
-      if (driver) setProfile(driver.data());
-    });
+  const driver = snap.docs.find(d=>d.id==="driver");
+  if (driver) {
+    setProfile(driver.data());
+    setProfileLocked(true);  // ← ΠΡΟΣΘΕΣΕ ΑΥΤΟ
+  }
+});
     const unsubServices = onSnapshot(collection(db,"services"), (snap) => {
       setServices(snap.docs.map(d=>d.data()).sort((a,b)=>b.id-a.id));
     });
