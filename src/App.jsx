@@ -69,8 +69,8 @@ const css = `
   .route-info-value { font-size: 14px; color: ${theme.text}; font-weight: 500; }
 
   .route-table { width: 100%; border-collapse: collapse; font-size: 12px; table-layout: fixed; }
-  .route-table th { font-family: 'Syne', sans-serif; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: ${theme.textMuted}; padding: 6px 6px; text-align: left; border-bottom: 1px solid ${theme.border}; overflow: hidden; white-space: nowrap; }
-  .route-table td { padding: 6px 6px; border-bottom: 1px solid ${theme.border}22; color: ${theme.text}; vertical-align: middle; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .route-table th { font-family: 'Syne', sans-serif; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: ${theme.textMuted}; padding: 6px 6px; text-align: center; border-bottom: 1px solid ${theme.border}; overflow: hidden; white-space: nowrap; }
+  .route-table td { padding: 6px 6px; border-bottom: 1px solid ${theme.border}22; color: ${theme.text}; vertical-align: middle; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; }
   .route-table tr:last-child td { border-bottom: none; }
 
   .client-badge { display: inline-block; background: ${theme.primaryLight}; color: ${theme.accent}; font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 20px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -140,6 +140,8 @@ const saveRoute    = (r)   => setDoc(doc(db, "routes",    String(r.id)), r);
 const saveLocation = (k,v) => setDoc(doc(db, "locations", k.replace(/\./g,"_")), v);
 const saveFuelEntry= (e)   => setDoc(doc(db, "fuels",     String(e.id)), e);
 const saveProfile  = (p)   => setDoc(doc(db, "profile",   "driver"), p);
+const saveServiceEntry  = (s) => setDoc(doc(db, "services", String(s.id)), s);
+const deleteServiceEntry = (id) => deleteDoc(doc(db, "services", String(id)));
 
 // ─── LiveView ─────────────────────────────────────────────────────
 function LiveView({ address }) {
@@ -304,6 +306,36 @@ function FuelModal({ onSave, onCancel }) {
   );
 }
 
+
+// ─── ServiceModal ────────────────────────────────────────────────
+function ServiceModal({ initial, onSave, onCancel }) {
+  const [form, setForm] = useState(initial ? {date:initial.date||"",km:initial.km||"",description:initial.description||""} : {date:"",km:"",description:""});
+  return (
+    <div className="overlay" onClick={onCancel}>
+      <div className="modal" onClick={e=>e.stopPropagation()}>
+        <div className="modal-title">{initial ? "✏️ Επεξεργασία Service" : "🔧 Νέο Service"}</div>
+        <div className="modal-subtitle">Καταχώρηση συντήρησης οχήματος</div>
+        <div className="input-group">
+          <label className="input-label">Ημερομηνία</label>
+          <input className="input" type="date" value={form.date} onChange={e=>setForm({...form,date:e.target.value})}/>
+        </div>
+        <div className="input-group">
+          <label className="input-label">Χιλιόμετρα</label>
+          <input className="input" type="number" placeholder="125000" value={form.km} onChange={e=>setForm({...form,km:e.target.value})}/>
+        </div>
+        <div className="input-group">
+          <label className="input-label">Περιγραφή</label>
+          <input className="input" placeholder="π.χ. Αλλαγή λαδιών, φίλτρα..." value={form.description} onChange={e=>setForm({...form,description:e.target.value})}/>
+        </div>
+        <div className="btn-row">
+          <button className="btn btn-success" style={{marginBottom:0}} onClick={()=>{if(form.date&&form.description)onSave(form);}}>💾 Αποθήκευση</button>
+          <button className="btn btn-secondary" style={{marginBottom:0}} onClick={onCancel}>Άκυρο</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main App ─────────────────────────────────────────────────────
 export default function App() {
   const todayKey = new Date().toLocaleDateString("el-GR");
@@ -323,6 +355,10 @@ export default function App() {
   const [arrivalData,  setArrivalData]  = useState(null);
   const [editingRoute, setEditingRoute] = useState(null);
   const [wakeLock,     setWakeLock]     = useState(null);
+  const [profileLocked, setProfileLocked] = useState(false);
+  const [services, setServices] = useState([]);
+  const [showServiceModal, setShowServiceModal] = useState(false);
+  const [editingService, setEditingService] = useState(null);
 
   const now = () => new Date().toLocaleString("el-GR");
 
@@ -375,8 +411,11 @@ export default function App() {
       const driver = snap.docs.find(d=>d.id==="driver");
       if (driver) setProfile(driver.data());
     });
+    const unsubServices = onSnapshot(collection(db,"services"), (snap) => {
+      setServices(snap.docs.map(d=>d.data()).sort((a,b)=>b.id-a.id));
+    });
 
-    return () => { unsubRoutes(); unsubLocations(); unsubFuels(); unsubProfile(); };
+    return () => { unsubRoutes(); unsubLocations(); unsubFuels(); unsubProfile(); unsubServices(); };
   }, []);
 
   // ─── Profile debounce save ────────────────────────────────────
@@ -436,6 +475,7 @@ export default function App() {
     const newRoute = {
       id: Date.now(),
       fromBase: false,
+      fromLastClient: lastRoute.end.label || null,
       start: { location: lastRoute.end.location, time: now(), timestamp: Date.now() }
     };
     setActiveRoute(newRoute);
@@ -461,6 +501,17 @@ export default function App() {
     releaseWakeLock();
   };
 
+
+  const arriveAtBase = async () => {
+    if (!activeRoute) return;
+    setSyncing(true);
+    const baseAddr = profile.baseAddress || "Έδρα";
+    const completed = {...activeRoute, gpsKey:null, end:{location:baseAddr, time:now(), label:"Έδρα", timestamp:Date.now(), isBase:true}};
+    await saveRoute(completed);
+    setSyncing(false);
+    setActiveRoute(null);
+    releaseWakeLock();
+  };
   const handleEditSave = async (updatedRoute) => {
     setSyncing(true);
     await saveRoute(updatedRoute);
@@ -572,7 +623,6 @@ export default function App() {
               {tab==="history" && `${routes.length} καταχωρήσεις`}
               {tab==="stats"   && `${allRoutes.length} συνολικά`}
               {tab==="fuel"    && `${fuels.length} ανεφοδιασμοί`}
-              {tab==="profile" && (profile.plate||"Χωρίς πινακίδα")}
             </div>
           </div>
           {tab==="history" && <button className="btn btn-primary btn-sm" onClick={exportExcel}>📥 EXPORT</button>}
@@ -590,23 +640,31 @@ export default function App() {
                   <div style={{display:"flex",alignItems:"center",marginBottom:14}}>
                     <span className="pulse-dot"/>
                     <span style={{fontFamily:"Syne,sans-serif",fontWeight:700,fontSize:15,color:"#38bdf8"}}>ΔΙΑΔΡΟΜΗ ΣΕ ΕΞΕΛΙΞΗ</span>
+                    <span style={{marginLeft:8,fontSize:13,color:"#e8edf5",fontWeight:600}}>
+                      {activeRoute.fromBase && !activeRoute.fromLastClient
+                        ? "— Έδρα"
+                        : activeRoute.fromLastClient
+                          ? `— ${activeRoute.fromLastClient}`
+                          : ""}
+                    </span>
                   </div>
                   <div style={{marginBottom:14}}>
-                    <div className="route-info-label">ΕΝΑΡΞΗ ΑΠΟ</div>
-                    <div className="route-info-value">{activeRoute.start.location}</div>
-                    <div style={{fontSize:12,color:"#8899b0",marginTop:2}}>{activeRoute.start.time}</div>
+                    <div className="route-info-label">ΕΝΑΡΞΗ</div>
+                    <div className="route-info-value">{activeRoute.start.time}</div>
                   </div>
-                  <button className="btn btn-success" onClick={endRoute}>✓ &nbsp;ΚΑΤΑΓΡΑΦΗ ΑΦΙΞΗΣ</button>
+                  <div className="btn-row" style={{marginBottom:10}}>
+                    <button className="btn btn-success" style={{marginBottom:0}} onClick={endRoute}>✓ ΑΦΙΞΗ</button>
+                    <button className="btn" style={{marginBottom:0,background:"#7f1d1d",color:"white",border:"1px solid #ef4444"}} onClick={arriveAtBase}>🏠 ΑΦΙΞΗ ΣΕ ΕΔΡΑ</button>
+                  </div>
                 </div>
               ) : (
                 <div className="card">
                   <div className="card-title">ΝΕΑ ΔΙΑΔΡΟΜΗ</div>
-                  <button className="btn btn-primary"   onClick={startFromBase}>🏠 &nbsp;ΕΝΑΡΞΗ ΑΠΟ ΕΔΡΑ</button>
-                  <button className="btn btn-secondary" onClick={startFromGPS}>📍 &nbsp;ΕΝΑΡΞΗ ΑΠΟ GPS</button>
-                  <button className="btn btn-secondary" onClick={continueFromLast}
-                    disabled={![...routes].reverse().find(r=>r.end?.location)}>
-                    🔁 &nbsp;ΕΠΟΜΕΝΗ ΣΤΑΣΗ
-                  </button>
+                  {![...routes].reverse().find(r=>r.end?.location) || [...routes].reverse().find(r=>r.end?.location)?.end?.isBase ? (
+                    <button className="btn btn-primary" onClick={startFromBase}>🏠 &nbsp;ΕΝΑΡΞΗ ΑΠΟ ΕΔΡΑ</button>
+                  ) : (
+                    <button className="btn btn-secondary" onClick={continueFromLast}>🔁 &nbsp;ΕΠΟΜΕΝΗ ΣΤΑΣΗ</button>
+                  )}
                 </div>
               )}
               <div className="card">
@@ -618,7 +676,7 @@ export default function App() {
                     <thead><tr>
                       <th style={{width:"8%"}}>#</th>
                       <th style={{width:"42%"}}>ΠΕΛΑΤΗΣ</th>
-                      <th style={{width:"32%"}}>ΩΡΑ</th>
+                      <th style={{width:"32%"}}>ΑΦΙΞΗ</th>
                       <th style={{width:"18%"}}></th>
                     </tr></thead>
                     <tbody>{routes.map((r,i)=>(
@@ -746,20 +804,39 @@ export default function App() {
           {tab==="profile" && (
             <div>
               <div className="card">
-                <div className="card-title">ΠΡΟΣΩΠΙΚΑ</div>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-                  <div className="input-group"><label className="input-label">Όνομα</label><input className="input" placeholder="Γιώργης" value={profile.firstName||""} onChange={e=>setProfile({...profile,firstName:e.target.value})}/></div>
-                  <div className="input-group"><label className="input-label">Επίθετο</label><input className="input" placeholder="Παπαδόπουλος" value={profile.lastName||""} onChange={e=>setProfile({...profile,lastName:e.target.value})}/></div>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+                  <div className="card-title" style={{margin:0}}>ΠΡΟΦΙΛ ΟΔΗΓΟΥ</div>
+                  {profileLocked ? (
+                    <button className="btn btn-secondary btn-sm" onClick={()=>setProfileLocked(false)}>✏️ Επεξεργασία</button>
+                  ) : (
+                    <button className="btn btn-primary btn-sm" onClick={()=>setProfileLocked(true)}>💾 Αποθήκευση</button>
+                  )}
                 </div>
-              </div>
-              <div className="card">
-                <div className="card-title">ΟΧΗΜΑ</div>
-                <div className="input-group"><label className="input-label">Πινακίδα</label><input className="input" placeholder="ΑΒΓ-1234" value={profile.plate||""} onChange={e=>setProfile({...profile,plate:e.target.value})}/></div>
-                <div className="input-group"><label className="input-label">Χιλιόμετρα έναρξης ημέρας</label><input className="input" type="number" placeholder="125000" value={profile.startKm||""} onChange={e=>setProfile({...profile,startKm:e.target.value})}/></div>
-              </div>
-              <div className="card">
-                <div className="card-title">ΕΔΡΑ</div>
-                <div className="input-group"><label className="input-label">Διεύθυνση Έδρας</label><input className="input" placeholder="Αθήνα, Ελλάδα" value={profile.baseAddress||""} onChange={e=>setProfile({...profile,baseAddress:e.target.value})}/></div>
+                {profileLocked ? (
+                  <details>
+                    <summary style={{cursor:"pointer",fontFamily:"Syne,sans-serif",fontSize:12,fontWeight:700,
+                      textTransform:"uppercase",letterSpacing:"1px",color:"#8899b0",listStyle:"none",
+                      display:"flex",justifyContent:"space-between",alignItems:"center",padding:"4px 0"}}>
+                      <span>👤 {profile.firstName} {profile.lastName}</span>
+                      <span style={{fontSize:11}}>▼</span>
+                    </summary>
+                    <div style={{marginTop:12,fontSize:14,lineHeight:2,color:"#e8edf5"}}>
+                      <div><span style={{color:"#8899b0",fontSize:12}}>Πινακίδα: </span>{profile.plate}</div>
+                      <div><span style={{color:"#8899b0",fontSize:12}}>Χλμ έναρξης: </span>{profile.startKm}</div>
+                      <div><span style={{color:"#8899b0",fontSize:12}}>Έδρα: </span>{profile.baseAddress}</div>
+                    </div>
+                  </details>
+                ) : (
+                  <div>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+                      <div className="input-group"><label className="input-label">Όνομα</label><input className="input" placeholder="Γιώργης" value={profile.firstName||""} onChange={e=>setProfile({...profile,firstName:e.target.value})}/></div>
+                      <div className="input-group"><label className="input-label">Επίθετο</label><input className="input" placeholder="Παπαδόπουλος" value={profile.lastName||""} onChange={e=>setProfile({...profile,lastName:e.target.value})}/></div>
+                    </div>
+                    <div className="input-group"><label className="input-label">Πινακίδα</label><input className="input" placeholder="ΑΒΓ-1234" value={profile.plate||""} onChange={e=>setProfile({...profile,plate:e.target.value})}/></div>
+                    <div className="input-group"><label className="input-label">Χιλιόμετρα έναρξης</label><input className="input" type="number" placeholder="125000" value={profile.startKm||""} onChange={e=>setProfile({...profile,startKm:e.target.value})}/></div>
+                    <div className="input-group"><label className="input-label">Διεύθυνση Έδρας</label><input className="input" placeholder="Αθήνα, Ελλάδα" value={profile.baseAddress||""} onChange={e=>setProfile({...profile,baseAddress:e.target.value})}/></div>
+                  </div>
+                )}
               </div>
               {Object.keys(locations).length >= 0 && (
                 <div className="card" style={{padding:0,overflow:"hidden"}}>
@@ -801,8 +878,39 @@ export default function App() {
                   </details>
                 </div>
               )}
+              <div className="card" style={{padding:0,overflow:"hidden"}}>
+                <details>
+                  <summary style={{cursor:"pointer",fontFamily:"Syne,sans-serif",fontSize:12,fontWeight:700,
+                    textTransform:"uppercase",letterSpacing:"1px",color:"#8899b0",padding:"14px 18px",
+                    listStyle:"none",display:"flex",justifyContent:"space-between",alignItems:"center",
+                    borderBottom:services.length>0?"1px solid #1e3a5f":"none"}}>
+                    <span>🔧 ΣΥΝΤΗΡΗΣΗ ΟΧΗΜΑΤΟΣ</span>
+                    <span style={{fontWeight:400,fontSize:11}}>({services.length})</span>
+                  </summary>
+                  <div style={{padding:"10px 18px 14px"}}>
+                    <button className="btn btn-primary btn-sm" style={{marginBottom:12,width:"100%"}} onClick={()=>{setEditingService(null);setShowServiceModal(true);}}>+ Προσθήκη Service</button>
+                    {services.length===0 ? (
+                      <div className="empty" style={{padding:"10px 0"}}>Καμία καταχώρηση συντήρησης</div>
+                    ) : (
+                      services.map(s=>(
+                        <div key={s.id} style={{padding:"10px 0",borderBottom:"1px solid #1e3a5f22",display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{fontSize:13,fontWeight:600,color:"#e8edf5"}}>{s.description}</div>
+                            <div style={{fontSize:11,color:"#8899b0",marginTop:3}}>{s.date}{s.km?` · ${s.km} χλμ`:""}</div>
+                          </div>
+                          <div className="action-btns">
+                            <button className="icon-btn icon-btn-edit" onClick={()=>{setEditingService(s);setShowServiceModal(true);}}>✏️</button>
+                            <button className="icon-btn icon-btn-del" onClick={()=>{if(window.confirm("Διαγραφή;"))deleteServiceEntry(s.id);}}>🗑️</button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </details>
+              </div>
             </div>
           )}
+
         </div>
 
         {/* BOTTOM NAV */}
@@ -818,6 +926,17 @@ export default function App() {
       {arrivalData   && <ArrivalModal rawAddress={arrivalData.rawAddress} knownEntry={arrivalData.knownEntry} onDone={handleArrivalDone} onCancel={()=>{setArrivalData(null);releaseWakeLock();}}/>}
       {showFuel      && <FuelModal onSave={saveFuel} onCancel={()=>setShowFuel(false)}/>}
       {editingRoute  && <EditRouteModal route={editingRoute} onSave={handleEditSave} onCancel={()=>setEditingRoute(null)}/>}
+            {showServiceModal && <ServiceModal
+        initial={editingService}
+        onSave={async (form)=>{
+          const entry = editingService ? {...editingService,...form} : {id:Date.now(),...form};
+          setSyncing(true);
+          await saveServiceEntry(entry);
+          setSyncing(false);
+          setShowServiceModal(false); setEditingService(null);
+        }}
+        onCancel={()=>{setShowServiceModal(false);setEditingService(null);}}
+      />}
       {showHelp      && <HelpModal onClose={()=>setShowHelp(false)}/>}
     </>
   );
