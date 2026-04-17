@@ -633,21 +633,21 @@ export default function App() {
 
         {/* TAB BAR */}
         <div className="tab-bar">
-          <div>
-            <div className="tab-bar-title">
-              {tab==="record"  && "Καταγραφή Διαδρομής"}
-              {tab==="history" && "Ιστορικό"}
-              {tab==="stats"   && "Στατιστικά"}
-              {tab==="fuel"    && "Ανεφοδιασμοί"}
-              {tab==="profile" && "Στοιχεία Οδηγού"}
-            </div>
-            <div className="tab-bar-sub">
-              {tab==="record"  && `${routes.length} διαδρομές σήμερα`}
-              {tab==="history" && `${routes.length} καταχωρήσεις`}
-              {tab==="stats"   && `${allRoutes.length} συνολικά`}
-              {tab==="fuel"    && `${fuels.length} ανεφοδιασμοί`}
-            </div>
-          </div>
+  <div style={{textAlign: tab==="record" ? "center" : "left", flex:1}}>
+    <div className="tab-bar-title">
+      {tab==="record"  && "Καταγραφή Διαδρομής"}
+      {tab==="history" && "Ιστορικό"}
+      {tab==="stats"   && "Στατιστικά"}
+      {tab==="fuel"    && "Ανεφοδιασμοί"}
+      {tab==="profile" && "Στοιχεία Οδηγού"}
+    </div>
+    <div className="tab-bar-sub">
+      {tab==="record"  && `${routes.length} διαδρομές σήμερα`}
+      {tab==="history" && `${routes.length} καταχωρήσεις`}
+      {tab==="stats"   && `${allRoutes.length} συνολικά`}
+      {tab==="fuel"    && `${fuels.length} ανεφοδιασμοί`}
+    </div>
+  </div>
           {tab==="history" && <button className="btn btn-primary btn-sm" onClick={exportExcel}>📥 EXPORT</button>}
           {tab==="fuel"    && <button className="btn btn-primary btn-sm" onClick={()=>setShowFuel(true)}>+ ΝΕΟΣ</button>}
         </div>
@@ -661,7 +661,7 @@ export default function App() {
               {activeRoute ? (
                 <div className="active-route-card">
                   <div style={{marginBottom:14}}>
-                    <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6,justifyContent:"center"}}>
                       <span className="pulse-dot"/>
                       <span style={{fontFamily:"Syne,sans-serif",fontWeight:700,fontSize:15,color:"#38bdf8"}}>ΔΙΑΔΡΟΜΗ ΣΕ ΕΞΕΛΙΞΗ</span>
                     </div>
