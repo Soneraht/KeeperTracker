@@ -141,7 +141,9 @@ const saveLocation = (k,v) => setDoc(doc(db, "locations", k.replace(/\./g,"_")),
 const saveFuelEntry= (e)   => setDoc(doc(db, "fuels",     String(e.id)), e);
 const saveProfile  = (p)   => setDoc(doc(db, "profile",   "driver"), p);
 const saveServiceEntry  = (s) => setDoc(doc(db, "services", String(s.id)), s);
-const deleteServiceEntry = (id) => deleteDoc(doc(db, "services", String(id)));
+const deleteServiceEntry  = (id) => deleteDoc(doc(db, "services",    String(id)));
+const saveActiveRouteDoc  = (r)  => setDoc(doc(db,  "activeRoute", "current"), r);
+const clearActiveRouteDoc = ()   => deleteDoc(doc(db, "activeRoute", "current"));
 
 // ─── LiveView ─────────────────────────────────────────────────────
 function LiveView({ address }) {
@@ -276,7 +278,7 @@ function ArrivalModal({ rawAddress, knownEntry, onDone, onCancel }) {
     <div className="overlay"><div className="modal" onClick={e=>e.stopPropagation()}>
       <div className="modal-title">ΟΝΟΜΑ ΠΕΛΑΤΗ</div>
       <div className="modal-subtitle">Διεύθυνση: <strong style={{color:"#e8edf5"}}>{finalAddress}</strong></div>
-      <div className="input-group"><label className="input-label">Επωνυμία / Όνομα</label><input className="input" type="text" placeholder="π.χ. Παπαδόπουλος Γιώργης" value={clientName} onChange={e=>setClientName(e.target.value)} autoFocus/></div>
+      <div className="input-group"><label className="input-label">Επωνυμία / Όνομα</label><input className="input" type="text" placeholder="π.χ. Παπαδόπουλος Γιώργος" value={clientName} onChange={e=>setClientName(e.target.value)} autoFocus/></div>
       <div className="btn-row">
         <button className="btn btn-success" onClick={()=>onDone(finalAddress,clientName.trim()||"Άγνωστο")}>✓ ΑΠΟΘΗΚΕΥΣΗ</button>
         <button className="btn btn-secondary" onClick={()=>setStep("confirm_address")}>ΠΙΣΩ</button>
@@ -390,9 +392,11 @@ export default function App() {
 
   // ─── Firestore real-time listeners + sessionStorage restore ───
   useEffect(() => {
-    // Επαναφορά ενεργής διαδρομής από sessionStorage
-    const savedActive = sessionStorage.getItem("kt_activeRoute");
-    if (savedActive) setActiveRoute(JSON.parse(savedActive));
+    // Επαναφορά ενεργής διαδρομής από Firestore
+    const unsubActive = onSnapshot(collection(db,"activeRoute"), snap => {
+      const cur = snap.docs.find(d=>d.id==="current");
+      setActiveRoute(cur ? cur.data() : null);
+    });
 
     const unsubRoutes = onSnapshot(collection(db,"routes"), (snap) => {
       const data = snap.docs.map(d=>d.data()).sort((a,b)=>a.start.timestamp-b.start.timestamp);
@@ -408,33 +412,24 @@ export default function App() {
       setFuels(snap.docs.map(d=>d.data()).sort((a,b)=>b.id-a.id));
     });
     const unsubProfile = onSnapshot(collection(db,"profile"), (snap) => {
-  const driver = snap.docs.find(d=>d.id==="driver");
-  if (driver) {
-    setProfile(driver.data());
-    setProfileLocked(true);  // ← ΠΡΟΣΘΕΣΕ ΑΥΤΟ
-  }
-});
+      const driver = snap.docs.find(d=>d.id==="driver");
+      if (driver) setProfile(driver.data());
+    });
     const unsubServices = onSnapshot(collection(db,"services"), (snap) => {
       setServices(snap.docs.map(d=>d.data()).sort((a,b)=>b.id-a.id));
     });
 
-    return () => { unsubRoutes(); unsubLocations(); unsubFuels(); unsubProfile(); unsubServices(); };
+    return () => { unsubRoutes(); unsubLocations(); unsubFuels(); unsubProfile(); unsubServices(); unsubActive(); };
   }, []);
 
   // ─── Profile debounce save ────────────────────────────────────
   useEffect(() => {
+    const hasData = profile.firstName || profile.lastName || profile.plate || profile.startKm || profile.baseAddress;
+    if (!hasData) return;
     const t = setTimeout(() => { saveProfile(profile); }, 800);
     return () => clearTimeout(t);
   }, [profile]);
 
-  // ─── sessionStorage για activeRoute ──────────────────────────
-  useEffect(() => {
-    if (activeRoute) {
-      sessionStorage.setItem("kt_activeRoute", JSON.stringify(activeRoute));
-    } else {
-      sessionStorage.removeItem("kt_activeRoute");
-    }
-  }, [activeRoute]);
 
   // ─── Geolocation helpers ──────────────────────────────────────
   const getCoords = () => new Promise(resolve => {
@@ -461,7 +456,9 @@ export default function App() {
   // ─── Route actions ────────────────────────────────────────────
   const startFromBase = async () => {
     await requestWakeLock();
-    setActiveRoute({id:Date.now(), fromBase:true, start:{location:profile.baseAddress||"Έδρα", time:now(), timestamp:Date.now()}});
+    const nr = {id:Date.now(), fromBase:true, start:{location:profile.baseAddress||"Έδρα", time:now(), timestamp:Date.now()}};
+    setActiveRoute(nr);
+    await saveActiveRouteDoc(nr);
   };
 
   const startFromGPS = async () => {
@@ -483,13 +480,35 @@ export default function App() {
     };
     setActiveRoute(newRoute);
     await saveRoute(newRoute);
+    await saveActiveRouteDoc(newRoute);
+  };
+
+  const findNearbyLocation = (lat, lon) => {
+    const toRad = d => d * Math.PI / 180;
+    const R = 6371000;
+    let best = null, bestDist = 150;
+    Object.entries(locations).forEach(([k, v]) => {
+      const parts = k.split("_");
+      if (parts.length < 2) return;
+      const [klat, klon] = parts.map(Number);
+      const dLat = toRad(klat - lat);
+      const dLon = toRad(klon - lon);
+      const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat))*Math.cos(toRad(klat))*Math.sin(dLon/2)**2;
+      const d = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      if (d < bestDist) { bestDist = d; best = k; }
+    });
+    return best;
   };
 
   const endRoute = async () => {
     if (!activeRoute) return;
     const coords = await getCoords();
     let rawAddress="Άγνωστη τοποθεσία", key=null;
-    if (coords) { rawAddress=await reverseGeocode(coords.lat,coords.lon); key=gpsKey(coords.lat,coords.lon); }
+    if (coords) {
+      rawAddress = await reverseGeocode(coords.lat, coords.lon);
+      const nearbyKey = findNearbyLocation(coords.lat, coords.lon);
+      key = nearbyKey || gpsKey(coords.lat, coords.lon);
+    }
     setArrivalData({rawAddress, key, knownEntry: key&&locations[key] ? locations[key] : null});
   };
 
@@ -511,6 +530,7 @@ export default function App() {
     const baseAddr = profile.baseAddress || "Έδρα";
     const completed = {...activeRoute, gpsKey:null, end:{location:baseAddr, time:now(), label:"Έδρα", timestamp:Date.now(), isBase:true}};
     await saveRoute(completed);
+    await clearActiveRouteDoc();
     setSyncing(false);
     setActiveRoute(null);
     releaseWakeLock();
@@ -640,19 +660,22 @@ export default function App() {
             <div>
               {activeRoute ? (
                 <div className="active-route-card">
-                  <div style={{display:"flex",alignItems:"center",marginBottom:14}}>
-                    <span className="pulse-dot"/>
-                    <span style={{fontFamily:"Syne,sans-serif",fontWeight:700,fontSize:15,color:"#38bdf8"}}>ΔΙΑΔΡΟΜΗ ΣΕ ΕΞΕΛΙΞΗ</span>
-                    <span style={{marginLeft:8,fontSize:13,color:"#e8edf5",fontWeight:600}}>
-                      {activeRoute.fromBase && !activeRoute.fromLastClient
-                        ? "— Έδρα"
-                        : activeRoute.fromLastClient
-                          ? `— ${activeRoute.fromLastClient}`
-                          : ""}
-                    </span>
-                  </div>
                   <div style={{marginBottom:14}}>
-                    <div className="route-info-label">ΕΝΑΡΞΗ</div>
+                    <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
+                      <span className="pulse-dot"/>
+                      <span style={{fontFamily:"Syne,sans-serif",fontWeight:700,fontSize:15,color:"#38bdf8"}}>ΔΙΑΔΡΟΜΗ ΣΕ ΕΞΕΛΙΞΗ</span>
+                    </div>
+                    <div style={{fontSize:12,color:"#8899b0",marginBottom:10}}>
+                      {"από: "}
+                      <span style={{color:"#e8edf5",fontWeight:600}}>
+                        {activeRoute.fromBase && !activeRoute.fromLastClient
+                          ? "Έδρα"
+                          : activeRoute.fromLastClient
+                            ? activeRoute.fromLastClient
+                            : activeRoute.start.location}
+                      </span>
+                    </div>
+                    <div className="route-info-label">ΩΡΑ ΕΝΑΡΞΗΣ</div>
                     <div className="route-info-value">{activeRoute.start.time}</div>
                   </div>
                   <div className="btn-row" style={{marginBottom:10}}>
@@ -832,7 +855,7 @@ export default function App() {
                 ) : (
                   <div>
                     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-                      <div className="input-group"><label className="input-label">Όνομα</label><input className="input" placeholder="Γιώργης" value={profile.firstName||""} onChange={e=>setProfile({...profile,firstName:e.target.value})}/></div>
+                      <div className="input-group"><label className="input-label">Όνομα</label><input className="input" placeholder="Γιώργος" value={profile.firstName||""} onChange={e=>setProfile({...profile,firstName:e.target.value})}/></div>
                       <div className="input-group"><label className="input-label">Επίθετο</label><input className="input" placeholder="Παπαδόπουλος" value={profile.lastName||""} onChange={e=>setProfile({...profile,lastName:e.target.value})}/></div>
                     </div>
                     <div className="input-group"><label className="input-label">Πινακίδα</label><input className="input" placeholder="ΑΒΓ-1234" value={profile.plate||""} onChange={e=>setProfile({...profile,plate:e.target.value})}/></div>
