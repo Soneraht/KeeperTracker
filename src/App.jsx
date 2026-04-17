@@ -73,7 +73,7 @@ const css = `
   .route-table td { padding: 6px 6px; border-bottom: 1px solid ${theme.border}22; color: ${theme.text}; vertical-align: middle; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; }
   .route-table tr:last-child td { border-bottom: none; }
 
-  .client-badge { display: inline-block; background: ${theme.primaryLight}; color: ${theme.accent}; font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 20px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .client-badge { display: block; color: ${theme.accent}; font-size: 12px; font-weight: 600; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }; color: ${theme.accent}; font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 20px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
   .action-btns { display: flex; gap: 2px; align-items: center; }
   .icon-btn { background: none; border: none; cursor: pointer; font-size: 14px; padding: 3px 3px; border-radius: 6px; transition: background 0.15s; line-height: 1; flex-shrink: 0; }
@@ -217,76 +217,119 @@ function EditRouteModal({ route, onSave, onCancel }) {
 }
 
 // ─── ArrivalModal ─────────────────────────────────────────────────
-function ArrivalModal({ rawAddress, knownEntry, onDone, onCancel }) {
-  const [step,         setStep]         = useState(knownEntry ? "known" : "confirm_address");
+function ArrivalModal({ rawAddress, knownEntry, locations, onDone, onCancel }) {
+  const [step,         setStep]         = useState("pick_location");
+  const [search,       setSearch]       = useState("");
   const [editedNumber, setEditedNumber] = useState("");
   const [finalAddress, setFinalAddress] = useState(rawAddress);
   const [clientName,   setClientName]   = useState(knownEntry?.name || "");
 
-  if (step === "known") return (
-    <div className="overlay"><div className="modal" onClick={e=>e.stopPropagation()}>
-      <div className="modal-title">ΑΦΙΞΗ</div>
-      <div className="modal-subtitle">Γνωστός προορισμός — επιβεβαίωση</div>
-      <div className="address-box">{knownEntry.address}</div>
-      <div style={{fontSize:15,color:"#38bdf8",fontWeight:600,marginBottom:20}}>👤 {knownEntry.name}</div>
-      <div className="btn-row">
-        <button className="btn btn-success" onClick={()=>onDone(knownEntry.address,knownEntry.name)}>✓ ΕΠΙΒΕΒΑΙΩΣΗ</button>
-        <button className="btn btn-secondary" onClick={()=>setStep("confirm_address")}>ΑΛΛΑΓΗ</button>
+  const sortedLocs = Object.entries(locations || {})
+    .map(([k,v]) => ({key:k, ...v}))
+    .sort((a,b) => (a.name||"").localeCompare(b.name||"", "el"));
+
+  const filtered = search.trim()
+    ? sortedLocs.filter(l =>
+        (l.name||"").toLowerCase().includes(search.toLowerCase()) ||
+        (l.address||"").toLowerCase().includes(search.toLowerCase())
+      )
+    : sortedLocs;
+
+  // Step: pick_location — λίστα αποθηκευμένων + search
+  if (step === "pick_location") return (
+    <div className="overlay" onClick={onCancel}>
+      <div className="modal" onClick={e=>e.stopPropagation()}>
+        <div className="modal-title">📍 Άφιξη</div>
+        <div className="modal-subtitle">Επίλεξε προορισμό ή πρόσθεσε νέο</div>
+        <input
+          className="input"
+          placeholder="🔍 Αναζήτηση..."
+          value={search}
+          onChange={e=>setSearch(e.target.value)}
+          autoFocus
+          style={{marginBottom:12}}
+        />
+        <div style={{maxHeight:260,overflowY:"auto",marginBottom:12}}>
+          {filtered.length === 0 && (
+            <div style={{textAlign:"center",color:"#8899b0",fontSize:13,padding:"20px 0"}}>Κανένα αποτέλεσμα</div>
+          )}
+          {filtered.map(loc => (
+            <div key={loc.key}
+              onClick={()=>onDone(loc.address, loc.name)}
+              style={{padding:"12px 14px",borderBottom:"1px solid #1e3a5f44",cursor:"pointer",borderRadius:8,marginBottom:4,background:"#1a2235"}}
+            >
+              <div style={{fontSize:14,fontWeight:600,color:"#e8edf5"}}>{loc.name}</div>
+              <div style={{fontSize:11,color:"#8899b0",marginTop:2}}>{loc.address}</div>
+            </div>
+          ))}
+        </div>
+        <button className="btn btn-secondary" style={{marginBottom:8}} onClick={()=>setStep("confirm_address")}>
+          📡 Νέος προορισμός (GPS)
+        </button>
+        <button className="btn btn-secondary" style={{marginBottom:0}} onClick={onCancel}>Άκυρο</button>
       </div>
-      <button className="btn btn-secondary" style={{marginTop:10}} onClick={onCancel}>ΑΚΥΡΟ</button>
-    </div></div>
+    </div>
   );
 
+  // Step: confirm_address — επιβεβαίωση GPS διεύθυνσης
   if (step === "confirm_address") return (
     <div className="overlay"><div className="modal" onClick={e=>e.stopPropagation()}>
-      <div className="modal-title">ΑΦΙΞΗ</div>
-      <div className="modal-subtitle">Η διεύθυνση που βρέθηκε είναι σωστή;</div>
+      <div className="modal-title">📍 Νέος Προορισμός</div>
+      <div className="modal-subtitle">Επιβεβαίωσε τη διεύθυνση GPS</div>
       <div className="address-box">{rawAddress}</div>
       <div className="btn-row">
-        <button className="btn btn-success" onClick={()=>{setFinalAddress(rawAddress);setStep("name");}}>✓ ΝΑΙ</button>
-        <button className="btn btn-warning" onClick={()=>setStep("edit_number")}>✏️ ΑΛΛΑΓΗ ΑΡΙΘΜΟΥ</button>
+        <button className="btn btn-success" onClick={()=>{setFinalAddress(rawAddress);setStep("name");}}>✓ Σωστή</button>
+        <button className="btn btn-warning" onClick={()=>setStep("edit_number")}>✏️ Αριθμός</button>
       </div>
-      <button className="btn btn-secondary" style={{marginTop:10}} onClick={onCancel}>ΑΚΥΡΟ</button>
+      <button className="btn btn-secondary" style={{marginTop:10}} onClick={()=>setStep("pick_location")}>← Πίσω</button>
     </div></div>
   );
 
+  // Step: edit_number
   if (step === "edit_number") {
-    const streetOnly = rawAddress.replace(/\s*\d+\s*,/,",").replace(/\s+\d+$/,"").trim();
+    const streetOnly = rawAddress.replace(/,.*/, "").replace(/\d+/, "").trim();
     return (
       <div className="overlay"><div className="modal" onClick={e=>e.stopPropagation()}>
-        <div className="modal-title">ΔΙΟΡΘΩΣΗ ΑΡΙΘΜΟΥ</div>
-        <div className="modal-subtitle">Οδός: <strong style={{color:"#e8edf5"}}>{streetOnly}</strong></div>
-        <div className="input-group"><label className="input-label">Αριθμός κτιρίου</label><input className="input" type="text" placeholder="π.χ. 12" value={editedNumber} onChange={e=>setEditedNumber(e.target.value)} autoFocus/></div>
+        <div className="modal-title">✏️ Διόρθωση</div>
+        <div className="modal-subtitle"><strong style={{color:"#e8edf5"}}>{streetOnly}</strong></div>
+        <div className="input-group"><label className="input-label">Αριθμός</label>
+          <input className="input" type="text" placeholder="π.χ. 12" value={editedNumber}
+            onChange={e=>setEditedNumber(e.target.value)} autoFocus/>
+        </div>
         <div className="btn-row">
           <button className="btn btn-primary" onClick={()=>{
             let addr = rawAddress;
             if (editedNumber) {
-              if (/\d+\s*,/.test(rawAddress)) addr = rawAddress.replace(/\d+(\s*,)/,`${editedNumber}$1`);
-              else if (rawAddress.includes(",")) addr = rawAddress.replace(","," "+editedNumber+",");
-              else if (/\s+\d+$/.test(rawAddress)) addr = rawAddress.replace(/\s+\d+$/," "+editedNumber);
-              else addr = rawAddress+" "+editedNumber;
+              if (/,/.test(rawAddress)) addr = rawAddress.replace(/,/, ` ${editedNumber},`);
+              else if (rawAddress.includes(" ")) addr = rawAddress.replace(/ /, ` ${editedNumber} `);
+              else addr = rawAddress + " " + editedNumber;
             }
             setFinalAddress(addr); setStep("name");
-          }}>ΕΠΟΜΕΝΟ →</button>
-          <button className="btn btn-secondary" onClick={()=>setStep("confirm_address")}>ΠΙΣΩ</button>
+          }}>✓ ΟΚ</button>
+          <button className="btn btn-secondary" onClick={()=>setStep("confirm_address")}>Πίσω</button>
         </div>
       </div></div>
     );
   }
 
+  // Step: name
   if (step === "name") return (
     <div className="overlay"><div className="modal" onClick={e=>e.stopPropagation()}>
-      <div className="modal-title">ΟΝΟΜΑ ΠΕΛΑΤΗ</div>
-      <div className="modal-subtitle">Διεύθυνση: <strong style={{color:"#e8edf5"}}>{finalAddress}</strong></div>
-      <div className="input-group"><label className="input-label">Επωνυμία / Όνομα</label><input className="input" type="text" placeholder="π.χ. Παπαδόπουλος Γιώργος" value={clientName} onChange={e=>setClientName(e.target.value)} autoFocus/></div>
+      <div className="modal-title">👤 Όνομα Πελάτη</div>
+      <div className="modal-subtitle"><strong style={{color:"#e8edf5"}}>{finalAddress}</strong></div>
+      <div className="input-group"><label className="input-label">Όνομα</label>
+        <input className="input" type="text" placeholder="π.χ. Παπαδόπουλος" value={clientName}
+          onChange={e=>setClientName(e.target.value)} autoFocus/>
+      </div>
       <div className="btn-row">
-        <button className="btn btn-success" onClick={()=>onDone(finalAddress,clientName.trim()||"Άγνωστο")}>✓ ΑΠΟΘΗΚΕΥΣΗ</button>
-        <button className="btn btn-secondary" onClick={()=>setStep("confirm_address")}>ΠΙΣΩ</button>
+        <button className="btn btn-success" onClick={()=>onDone(finalAddress, clientName.trim())}>💾 Αποθήκευση</button>
+        <button className="btn btn-secondary" onClick={()=>setStep("confirm_address")}>Πίσω</button>
       </div>
     </div></div>
   );
   return null;
 }
+
 
 // ─── FuelModal ────────────────────────────────────────────────────
 function FuelModal({ onSave, onCancel }) {
@@ -633,21 +676,21 @@ export default function App() {
 
         {/* TAB BAR */}
         <div className="tab-bar">
-  <div style={{textAlign: tab==="record" ? "center" : "left", flex:1}}>
-    <div className="tab-bar-title">
-      {tab==="record"  && "Καταγραφή Διαδρομής"}
-      {tab==="history" && "Ιστορικό"}
-      {tab==="stats"   && "Στατιστικά"}
-      {tab==="fuel"    && "Ανεφοδιασμοί"}
-      {tab==="profile" && "Στοιχεία Οδηγού"}
-    </div>
-    <div className="tab-bar-sub">
-      {tab==="record"  && `${routes.length} διαδρομές σήμερα`}
-      {tab==="history" && `${routes.length} καταχωρήσεις`}
-      {tab==="stats"   && `${allRoutes.length} συνολικά`}
-      {tab==="fuel"    && `${fuels.length} ανεφοδιασμοί`}
-    </div>
-  </div>
+          <div>
+            <div className="tab-bar-title">
+              {tab==="record"  && "Καταγραφή Διαδρομής"}
+              {tab==="history" && "Ιστορικό"}
+              {tab==="stats"   && "Στατιστικά"}
+              {tab==="fuel"    && "Ανεφοδιασμοί"}
+              {tab==="profile" && "Στοιχεία Οδηγού"}
+            </div>
+            <div className="tab-bar-sub">
+              {tab==="record"  && `${routes.length} διαδρομές σήμερα`}
+              {tab==="history" && `${routes.length} καταχωρήσεις`}
+              {tab==="stats"   && `${allRoutes.length} συνολικά`}
+              {tab==="fuel"    && `${fuels.length} ανεφοδιασμοί`}
+            </div>
+          </div>
           {tab==="history" && <button className="btn btn-primary btn-sm" onClick={exportExcel}>📥 EXPORT</button>}
           {tab==="fuel"    && <button className="btn btn-primary btn-sm" onClick={()=>setShowFuel(true)}>+ ΝΕΟΣ</button>}
         </div>
@@ -665,7 +708,7 @@ export default function App() {
                       <span className="pulse-dot"/>
                       <span style={{fontFamily:"Syne,sans-serif",fontWeight:700,fontSize:15,color:"#38bdf8"}}>ΔΙΑΔΡΟΜΗ ΣΕ ΕΞΕΛΙΞΗ</span>
                     </div>
-                    <div style={{fontSize:12,color:"#8899b0",marginBottom:10}}>
+                    <div style={{fontSize:12,color:"#8899b0",marginBottom:10,textAlign:"center"}}>
                       {"από: "}
                       <span style={{color:"#e8edf5",fontWeight:600}}>
                         {activeRoute.fromBase && !activeRoute.fromLastClient
@@ -675,8 +718,8 @@ export default function App() {
                             : activeRoute.start.location}
                       </span>
                     </div>
-                    <div className="route-info-label">ΩΡΑ ΕΝΑΡΞΗΣ</div>
-                    <div className="route-info-value">{activeRoute.start.time}</div>
+                    <div className="route-info-label" style={{textAlign:"center"}}>ΩΡΑ ΕΝΑΡΞΗΣ</div>
+                    <div className="route-info-value" style={{textAlign:"center"}}>{activeRoute.start.time}</div>
                   </div>
                   <div className="btn-row" style={{marginBottom:10}}>
                     <button className="btn btn-success" style={{marginBottom:0}} onClick={endRoute}>✓ ΑΦΙΞΗ</button>
@@ -708,7 +751,7 @@ export default function App() {
                     <tbody>{routes.map((r,i)=>(
                       <tr key={r.id}>
                         <td style={{color:"#8899b0"}}>{i===0&&r.fromBase?"🏠":i+1}</td>
-                        <td><span className="client-badge">{r.end?.label||"—"}</span></td>
+                        <td style={{textAlign:"left"}}><span className="client-badge">{r.end?.label||"—"}</span></td>
                         <td style={{color:"#8899b0",fontSize:11}}>{r.end?.time?.split(",")[1]?.trim()||"—"}</td>
                         <td><ActionBtns r={r}/></td>
                       </tr>
@@ -739,7 +782,7 @@ export default function App() {
                     <tbody>{routes.map((r,i)=>(
                       <tr key={r.id}>
                         <td style={{color:"#8899b0"}}>{i===0&&r.fromBase?"🏠":i+1}</td>
-                        <td><span className="client-badge">{r.end?.label||"—"}</span></td>
+                        <td style={{textAlign:"left"}}><span className="client-badge">{r.end?.label||"—"}</span></td>
                         <td style={{color:"#8899b0",fontSize:11}}>{r.start.time?.split(",")[1]?.trim()}</td>
                         <td style={{color:"#8899b0",fontSize:11}}>{r.end?.time?.split(",")[1]?.trim()||"—"}</td>
                         <td><ActionBtns r={r}/></td>
@@ -778,7 +821,7 @@ export default function App() {
                     <tbody>{applyFilters(allRoutes).map((r,i)=>(
                       <tr key={r.id}>
                         <td style={{color:"#8899b0"}}>{i===0&&r.fromBase?"🏠":i+1}</td>
-                        <td><span className="client-badge">{r.end?.label||"—"}</span></td>
+                        <td style={{textAlign:"left"}}><span className="client-badge">{r.end?.label||"—"}</span></td>
                         <td style={{color:"#8899b0",fontSize:11}}>{r.start.time?.split(",")[0]}</td>
                         <td style={{color:"#8899b0",fontSize:11}}>{r.start.time?.split(",")[1]?.trim()}</td>
                         <td><ActionBtns r={r}/></td>
@@ -855,7 +898,7 @@ export default function App() {
                 ) : (
                   <div>
                     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-                      <div className="input-group"><label className="input-label">Όνομα</label><input className="input" placeholder="Γιώργος" value={profile.firstName||""} onChange={e=>setProfile({...profile,firstName:e.target.value})}/></div>
+                      <div className="input-group"><label className="input-label">Όνομα</label><input className="input" placeholder="Γιώργης" value={profile.firstName||""} onChange={e=>setProfile({...profile,firstName:e.target.value})}/></div>
                       <div className="input-group"><label className="input-label">Επίθετο</label><input className="input" placeholder="Παπαδόπουλος" value={profile.lastName||""} onChange={e=>setProfile({...profile,lastName:e.target.value})}/></div>
                     </div>
                     <div className="input-group"><label className="input-label">Πινακίδα</label><input className="input" placeholder="ΑΒΓ-1234" value={profile.plate||""} onChange={e=>setProfile({...profile,plate:e.target.value})}/></div>
@@ -878,6 +921,17 @@ export default function App() {
                       <span style={{fontWeight:400,fontSize:11}}>({Object.keys(locations).length})</span>
                     </summary>
                     <div style={{padding:"0 18px"}}>
+                      <input
+                        className="input"
+                        placeholder="🔍 Αναζήτηση προορισμού..."
+                        style={{margin:"10px 0 12px 0"}}
+                        onChange={e=>{
+                          const v=e.target.value.toLowerCase();
+                          document.querySelectorAll('.loc-row').forEach(el=>{
+                            el.style.display=el.textContent.toLowerCase().includes(v)?'':'none';
+                          });
+                        }}
+                      />
                       {Object.keys(locations).length===0 ? (
                         <div className="empty" style={{padding:"20px 0"}}>Κανένας αποθηκευμένος προορισμός</div>
                       ) : (
@@ -949,7 +1003,7 @@ export default function App() {
         </nav>
       </div>
 
-      {arrivalData   && <ArrivalModal rawAddress={arrivalData.rawAddress} knownEntry={arrivalData.knownEntry} onDone={handleArrivalDone} onCancel={()=>{setArrivalData(null);releaseWakeLock();}}/>}
+      {arrivalData   && <ArrivalModal rawAddress={arrivalData.rawAddress} knownEntry={arrivalData.knownEntry} locations={locations} onDone={handleArrivalDone} onCancel={()=>{setArrivalData(null);releaseWakeLock();}}/>}
       {showFuel      && <FuelModal onSave={saveFuel} onCancel={()=>setShowFuel(false)}/>}
       {editingRoute  && <EditRouteModal route={editingRoute} onSave={handleEditSave} onCancel={()=>setEditingRoute(null)}/>}
             {showServiceModal && <ServiceModal
