@@ -605,7 +605,7 @@ function DriverApp({ user, onLogout }) {
 
   const handleDelete = async (id) => {
     setSyncing(true);
-    await deleteDoc(doc(db,"routes",String(id)));
+    await deleteDoc(doc(db, driverCol(uid,"routes"),    String(id)));
     setSyncing(false);
   };
 
@@ -619,13 +619,13 @@ function DriverApp({ user, onLogout }) {
 
   const deleteFuel = async (id) => {
     setSyncing(true);
-    await deleteDoc(doc(db,"fuels",String(id)));
+    await deleteDoc(doc(db, driverCol(uid,"fuels"),     String(id)));
     setSyncing(false);
   };
 
   const deleteLocation = async (key) => {
     setSyncing(true);
-    await deleteDoc(doc(db,"locations",key));
+    await deleteDoc(doc(db, driverCol(uid,"locations"), key));
     setSyncing(false);
   };
 
