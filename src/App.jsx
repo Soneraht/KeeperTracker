@@ -42,7 +42,7 @@ const css = `
   .bottom-nav { position: sticky; bottom: 0; background: ${theme.surface}; border-top: 1px solid ${theme.border}; display: flex; flex-shrink: 0; width: 100%; z-index: 100; }
   .nav-btn { flex: 1; background: none; border: none; color: ${theme.textMuted}; padding: 10px 4px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 10px; font-family: 'DM Sans', sans-serif; font-weight: 500; transition: color 0.2s; border-top: 2px solid transparent; margin-top: -1px; }
   .nav-btn.active { color: ${theme.accent}; border-top-color: ${theme.accent}; }
-  .nav-icon { font-size: 18px; line-height: 1; }
+  .nav-icon { font-size: 18px; line-height: 1; display:flex; align-items:center; justify-content:center; height:22px; }
 
   .card { background: ${theme.surface}; border: 1px solid ${theme.border}; border-radius: 14px; padding: 18px; margin-bottom: 14px; }
   .card-title { font-family: 'Syne', sans-serif; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.2px; color: ${theme.textMuted}; margin-bottom: 14px; }
@@ -166,35 +166,49 @@ function HelpModal({ onClose }) {
     <div className="overlay" onClick={onClose}>
       <div className="modal" onClick={e=>e.stopPropagation()}>
         <div className="modal-title">📖 Οδηγίες Χρήσης</div>
-        <div className="modal-subtitle">Τι μπορείς να κάνεις με το Keeper Tracker</div>
+        <div className="modal-subtitle">Keeper Tracker — Σύστημα Καταγραφής Δρομολογίων</div>
+
         <div className="help-section">
-          <div className="help-section-title">🚗 ΚΑΤΑΓΡΑΦΗ</div>
-          <div className="help-item"><span className="help-item-icon">🏠</span><div className="help-item-text"><strong>Έναρξη από Έδρα</strong><span>Ξεκινά νέα διαδρομή από την αποθηκευμένη διεύθυνση έδρας σου</span></div></div>
-          <div className="help-item"><span className="help-item-icon">📍</span><div className="help-item-text"><strong>Έναρξη από GPS</strong><span>Εντοπίζει αυτόματα την τρέχουσα τοποθεσία σου ως σημείο εκκίνησης</span></div></div>
-          <div className="help-item"><span className="help-item-icon">✅</span><div className="help-item-text"><strong>Καταγραφή Άφιξης</strong><span>Βρίσκει τη διεύθυνση μέσω GPS και ζητά επιβεβαίωση και όνομα πελάτη</span></div></div>
-          <div className="help-item"><span className="help-item-icon">🔁</span><div className="help-item-text"><strong>Γνωστοί Προορισμοί</strong><span>Αναγνωρίζει αυτόματα διευθύνσεις που έχεις ξαναεπισκεφτεί</span></div></div>
-          <div className="help-item"><span className="help-item-icon">📵</span><div className="help-item-text"><strong>Κλείδωμα Οθόνης</strong><span>Αν κλειδώσει η οθόνη, η ενεργή διαδρομή αποθηκεύεται αυτόματα και επανέρχεται όταν ξανανοίξεις την εφαρμογή</span></div></div>
+          <div className="help-section-title">🚐 Καταγραφή Δρομολογίου</div>
+          <div className="help-item"><span className="help-item-icon">🏠</span><div className="help-item-text"><strong>Εκκίνηση από Έδρα</strong><span>Ξεκινά δρομολόγιο από την αποθηκευμένη διεύθυνση έδρας.</span></div></div>
+          <div className="help-item"><span className="help-item-icon">📍</span><div className="help-item-text"><strong>Εκκίνηση από GPS</strong><span>Εντοπίζει την τρέχουσα θέση μέσω GPS και ξεκινά από εκεί.</span></div></div>
+          <div className="help-item"><span className="help-item-icon">🔄</span><div className="help-item-text"><strong>Συνέχεια από Τελευταίο</strong><span>Ξεκινά νέο δρομολόγιο από το τελευταίο σημείο άφιξης.</span></div></div>
+          <div className="help-item"><span className="help-item-icon">✅</span><div className="help-item-text"><strong>Άφιξη σε Πελάτη</strong><span>Καταγράφει GPS θέση· επιβεβαιώνεις διεύθυνση, διορθώνεις αριθμό αν χρειαστεί και καταχωρείς όνομα πελάτη. Μπορείς να επιλέξεις και από αποθηκευμένες τοποθεσίες.</span></div></div>
+          <div className="help-item"><span className="help-item-icon">🏠</span><div className="help-item-text"><strong>Επιστροφή στην Έδρα</strong><span>Κλείνει το δρομολόγιο με προορισμό την έδρα χωρίς χρήση GPS.</span></div></div>
         </div>
+
         <div className="help-section">
-          <div className="help-section-title">📋 ΙΣΤΟΡΙΚΟ</div>
-          <div className="help-item"><span className="help-item-icon">☁️</span><div className="help-item-text"><strong>Cloud Sync</strong><span>Όλα τα δεδομένα αποθηκεύονται στο Firebase σε real-time</span></div></div>
-          <div className="help-item"><span className="help-item-icon">✏️</span><div className="help-item-text"><strong>Επεξεργασία</strong><span>Αλλαγή ονόματος πελάτη ή διεύθυνσης — ενημερώνεται αυτόματα στο cloud</span></div></div>
-          <div className="help-item"><span className="help-item-icon">🗑️</span><div className="help-item-text"><strong>Διαγραφή</strong><span>Αφαίρεση καταχώρησης από όλες τις συσκευές</span></div></div>
-          <div className="help-item"><span className="help-item-icon">📥</span><div className="help-item-text"><strong>Export Excel</strong><span>Εξαγωγή διαδρομών ημέρας σε .xlsx αρχείο</span></div></div>
+          <div className="help-section-title">📋 Ιστορικό & Στατιστικά</div>
+          <div className="help-item"><span className="help-item-icon">📜</span><div className="help-item-text"><strong>Ιστορικό</strong><span>Εμφανίζει τα δρομολόγια της σημερινής ημέρας. Με Live View βλέπεις την τελευταία διεύθυνση στον χάρτη.</span></div></div>
+          <div className="help-item"><span className="help-item-icon">📊</span><div className="help-item-text"><strong>Στατιστικά</strong><span>Φιλτράρισε δρομολόγια ανά πελάτη, μήνα ή έτος. Εμφανίζει σύνολα από όλες τις ημέρες.</span></div></div>
+          <div className="help-item"><span className="help-item-icon">📤</span><div className="help-item-text"><strong>Export Excel</strong><span>Εξάγει τα σημερινά δρομολόγια σε αρχείο .xlsx με σύνολο χρόνου και χιλιομέτρων.</span></div></div>
+          <div className="help-item"><span className="help-item-icon">✏️</span><div className="help-item-text"><strong>Επεξεργασία / Διαγραφή</strong><span>Κάθε δρομολόγιο μπορεί να επεξεργαστεί (πελάτης, διεύθυνση) ή να διαγραφεί με το εικονίδιο 🗑️.</span></div></div>
         </div>
+
         <div className="help-section">
-          <div className="help-section-title">📊 ΣΤΑΤΙΣΤΙΚΑ</div>
-          <div className="help-item"><span className="help-item-icon">🔍</span><div className="help-item-text"><strong>Φίλτρα</strong><span>Αναζήτηση ανά πελάτη, μήνα ή έτος σε όλο το ιστορικό</span></div></div>
+          <div className="help-section-title">⛽ Καύσιμα & Service</div>
+          <div className="help-item"><span className="help-item-icon">⛽</span><div className="help-item-text"><strong>Καταχώρηση Καυσίμων</strong><span>Καταγράφεις λίτρα, κόστος, χιλιόμετρα και αριθμό απόδειξης. Εμφανίζει σύνολα κόστους/λίτρων.</span></div></div>
+          <div className="help-item"><span className="help-item-icon">🔧</span><div className="help-item-text"><strong>Service Οχήματος</strong><span>Στο Προφίλ, καταχώρησε ημερομηνία, χιλιόμετρα και περιγραφή service. Μπορείς να επεξεργαστείς ή να διαγράψεις κάθε εγγραφή.</span></div></div>
         </div>
+
         <div className="help-section">
-          <div className="help-section-title">⛽ ΚΑΥΣΙΜΑ</div>
-          <div className="help-item"><span className="help-item-icon">➕</span><div className="help-item-text"><strong>Νέος Ανεφοδιασμός</strong><span>Καταγραφή λίτρων, κόστους και χιλιομέτρων</span></div></div>
+          <div className="help-section-title">👤 Προφίλ & Τοποθεσίες</div>
+          <div className="help-item"><span className="help-item-icon">✏️</span><div className="help-item-text"><strong>Επεξεργασία Προφίλ</strong><span>Πάτα "Επεξεργασία" για να αλλάξεις στοιχεία (όνομα, πινακίδα, χλμ έναρξης, έδρα). Η αποθήκευση γίνεται αυτόματα. Πάτα "Αποθήκευση" για να κλείσεις τη φόρμα.</span></div></div>
+          <div className="help-item"><span className="help-item-icon">📍</span><div className="help-item-text"><strong>Αποθηκευμένες Τοποθεσίες</strong><span>Οι διευθύνσεις πελατών αποθηκεύονται αυτόματα μετά από κάθε άφιξη. Μπορείς να τις επεξεργαστείς ή διαγράψεις.</span></div></div>
         </div>
-        <button className="btn btn-secondary" style={{marginBottom:0,marginTop:6}} onClick={onClose}>ΚΛΕΙΣΙΜΟ</button>
+
+        <div className="help-section">
+          <div className="help-section-title">☁️ Συγχρονισμός</div>
+          <div className="help-item"><span className="help-item-icon">🔵</span><div className="help-item-text"><strong>Cloud Sync</strong><span>Όλα αποθηκεύονται σε Firebase σε πραγματικό χρόνο. Η ένδειξη "Sync..." εμφανίζεται κατά την αποθήκευση.</span></div></div>
+          <div className="help-item"><span className="help-item-icon">🔴</span><div className="help-item-text"><strong>Offline</strong><span>Αν χαθεί σύνδεση, εμφανίζεται "Offline". Τα δεδομένα συγχρονίζονται αυτόματα μόλις επιστρέψει το internet.</span></div></div>
+        </div>
+
+        <button className="btn btn-secondary" style={{marginBottom:0,marginTop:6}} onClick={onClose}>Κλείσιμο</button>
       </div>
     </div>
   );
 }
+
 
 // ─── EditRouteModal ───────────────────────────────────────────────
 function EditRouteModal({ route, onSave, onCancel }) {
@@ -400,7 +414,7 @@ export default function App() {
   const [arrivalData,  setArrivalData]  = useState(null);
   const [editingRoute, setEditingRoute] = useState(null);
   const [wakeLock,     setWakeLock]     = useState(null);
-  const [profileLocked, setProfileLocked] = useState(false);
+  const [editingProfile, setEditingProfile] = useState(false);
   const [services, setServices] = useState([]);
   const [showServiceModal, setShowServiceModal] = useState(false);
   const [editingService, setEditingService] = useState(null);
@@ -639,7 +653,7 @@ export default function App() {
   const totalFuelLiters    = fuels.reduce((s,f)=>s+Number(f.liters||0),0);
 
   const navItems = [
-    {key:"record",  icon:"🚗", label:"ΚΑΤΑΓΡΑΦΗ"},
+    {key:"record",  icon:(<svg xmlns="http://www.w3.org/2000/svg" width="22" height="20" viewBox="0 0 24 24" fill="white"><path d="M20 8h-3V4H3c-1.1 0-2 .9-2 2v11h2c0 1.66 1.34 3 3 3s3-1.34 3-3h6c0 1.66 1.34 3 3 3s3-1.34 3-3h2v-5l-3-4zM6 18.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm13.5-9l1.96 2.5H17V9.5h2.5zm-1.5 9c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg>), label:"ΚΑΤΑΓΡΑΦΗ"},
     {key:"history", icon:"📋", label:"ΙΣΤΟΡΙΚΟ"},
     {key:"stats",   icon:"📊", label:"ΣΤΑΤΙΣΤΙΚΑ"},
     {key:"fuel",    icon:"⛽", label:"ΚΑΥΣΙΜΑ"},
@@ -875,13 +889,13 @@ export default function App() {
               <div className="card">
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
                   <div className="card-title" style={{margin:0}}>ΠΡΟΦΙΛ ΟΔΗΓΟΥ</div>
-                  {profileLocked ? (
-                    <button className="btn btn-secondary btn-sm" onClick={()=>setProfileLocked(false)}>✏️ Επεξεργασία</button>
+                  {editingProfile ? (
+                    <button className="btn btn-primary btn-sm" onClick={()=>setEditingProfile(false)}>💾 Αποθήκευση</button>
                   ) : (
-                    <button className="btn btn-primary btn-sm" onClick={()=>setProfileLocked(true)}>💾 Αποθήκευση</button>
+                    <button className="btn btn-secondary btn-sm" onClick={()=>setEditingProfile(true)}>✏️ Επεξεργασία</button>
                   )}
                 </div>
-                {profileLocked ? (
+                {!editingProfile ? (
                   <details>
                     <summary style={{cursor:"pointer",fontFamily:"Syne,sans-serif",fontSize:12,fontWeight:700,
                       textTransform:"uppercase",letterSpacing:"1px",color:"#8899b0",listStyle:"none",
@@ -898,7 +912,7 @@ export default function App() {
                 ) : (
                   <div>
                     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-                      <div className="input-group"><label className="input-label">Όνομα</label><input className="input" placeholder="Γιώργος" value={profile.firstName||""} onChange={e=>setProfile({...profile,firstName:e.target.value})}/></div>
+                      <div className="input-group"><label className="input-label">Όνομα</label><input className="input" placeholder="Γιώργης" value={profile.firstName||""} onChange={e=>setProfile({...profile,firstName:e.target.value})}/></div>
                       <div className="input-group"><label className="input-label">Επίθετο</label><input className="input" placeholder="Παπαδόπουλος" value={profile.lastName||""} onChange={e=>setProfile({...profile,lastName:e.target.value})}/></div>
                     </div>
                     <div className="input-group"><label className="input-label">Πινακίδα</label><input className="input" placeholder="ΑΒΓ-1234" value={profile.plate||""} onChange={e=>setProfile({...profile,plate:e.target.value})}/></div>
