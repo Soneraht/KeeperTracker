@@ -856,17 +856,6 @@ function DriverApp({ user, onLogout }) {
         {editingRoute && <EditRouteModal route={editingRoute} onSave={handleEditSave} onCancel={()=>setEditingRoute(null)} />}
         {showServiceModal && <ServiceModal initial={editingService} onSave={async form => { const entry = editingService ? {...editingService, ...form} : {id:Date.now(), ...form}; setSyncing(true); await saveServiceEntry(uid, entry); setSyncing(false); setShowServiceModal(false); setEditingService(null); }} onCancel={()=>{setShowServiceModal(false);setEditingService(null);}} />}
 
-        {view === "changepass" && (
-          <div className="content">
-            <div className="card">
-              <div className="section-title">🔑 Αλλαγή Κωδικού</div>
-              <div style={{fontSize:13,color:T.textMuted,marginBottom:16}}>Λογαριασμός: <strong style={{color:T.text}}>{user.username}</strong></div>
-              <ChangePasswordForm userId={user.id} onBack={()=>setView("home")} />
-            </div>
-            <button className="btn btn-secondary" onClick={()=>setView("home")}>← Πίσω</button>
-          </div>
-        )}
-
         {showHelp && <HelpModal onClose={()=>setShowHelp(false)} />}
       </div>
     </>
@@ -1134,7 +1123,30 @@ function AdminPanel({ user, onLogout }) {
 }
 
 export default function App() {
-  const [authUser, setAuthUser] = useState(null);
+  const [authUser, setAuthUserRaw] = useState(() => {
+    try {
+      const saved = localStorage.getItem("authUser");
+      return saved ? JSON.parse(saved) : null;
+    } catch { return null; }
+  });
+
+  const setAuthUser = (user) => {
+    if (user) {
+      try { localStorage.setItem("authUser", JSON.stringify(user)); } catch {}
+    } else {
+      try { localStorage.removeItem("authUser"); } catch {}
+    }
+    setAuthUserRaw(user);
+  };
+
+  // Validate stored session on mount - clear if user deleted from Firestore
+  useEffect(() => {
+    if (!authUser) return;
+    getDocs(collection(db, "users")).then(snap => {
+      const still_exists = snap.docs.some(d => d.id === authUser.id);
+      if (!still_exists) setAuthUser(null);
+    }).catch(() => {});
+  }, []);
 
   useEffect(() => {
     async function ensureAdmin() {
