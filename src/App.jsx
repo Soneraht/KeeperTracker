@@ -1405,22 +1405,27 @@ export default function App() {
   }, []);
 
   const [authUser, setAuthUserRaw] = useState(() => {
-    try { const s = localStorage.getItem("authUser"); return s ? JSON.parse(s) : null; }
+    try { const s = sessionStorage.getItem("authUser"); return s ? JSON.parse(s) : null; }
     catch { return null; }
   });
 
   const setAuthUser = (user) => {
-    if (user) { try { localStorage.setItem("authUser", JSON.stringify(user)); } catch {} }
-    else       { try { localStorage.removeItem("authUser"); } catch {} }
+    if (user) { try { sessionStorage.setItem("authUser", JSON.stringify(user)); } catch {} }
+    else       { try { sessionStorage.removeItem("authUser"); } catch {} }
     setAuthUserRaw(user);
   };
 
   // Validate stored session — clear if account deleted from Firestore
   useEffect(() => {
     if (!authUser) return;
-    getDocs(collection(db, "users")).then(snap => {
-      if (!snap.docs.some(d => d.id === authUser.id)) setAuthUser(null);
-    }).catch(() => {});
+    // Wait for Firebase Auth to be ready before querying Firestore
+    const unsub = auth.onAuthStateChanged((firebaseUser) => {
+      unsub();
+      if (!firebaseUser) return;
+      getDocs(collection(db, "users")).then(snap => {
+        if (!snap.docs.some(d => d.id === authUser.id)) setAuthUser(null);
+      }).catch(() => {});
+    });
   }, []);
 
   if (!authUser) return <LoginPage onLogin={setAuthUser} />;
