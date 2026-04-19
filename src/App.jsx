@@ -1234,8 +1234,9 @@ function AdminPanel({ user, onLogout }) {
       <style>{css}</style>
       <div className="admin-wrap">
         <div className="admin-header">
-          <div className="logo">Keeper Tracker <span className="logo-beta">{user.role}</span></div>
-          <div style={{display:'flex',alignItems:'center',gap:8}}>
+<span className="logo">
+  Keeper Tracker
+</span>            <div style={{display:'flex',alignItems:'center',gap:8}}>
             <button className="help-btn" onClick={()=>setShowHelp(true)}>?</button>
             <button className="btn btn-secondary btn-sm" onClick={onLogout}>Έξοδος</button>
           </div>
