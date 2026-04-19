@@ -597,15 +597,18 @@ function DriverApp({ user, onLogout }) {
   };
   const handleEditSave = async (updatedRoute) => {
     setSyncing(true);
-    await saveRoute(updatedRoute);
-    if (updatedRoute.gpsKey) await saveLocation(updatedRoute.gpsKey,{address:updatedRoute.end.location,name:updatedRoute.end.label});
+    try {
+      await saveRoute(uid, updatedRoute);
+      if (updatedRoute.gpsKey) await saveLocation(uid, updatedRoute.gpsKey, {address:updatedRoute.end.location, name:updatedRoute.end.label});
+    } catch(e) { console.error("Edit save error:", e); }
     setSyncing(false);
     setEditingRoute(null);
   };
 
   const handleDelete = async (id) => {
     setSyncing(true);
-    await deleteDoc(doc(db, driverCol(uid,"routes"),    String(id)));
+    try { await deleteDoc(doc(db, driverCol(uid,"routes"), String(id))); }
+    catch(e) { console.error("Delete error:", e); }
     setSyncing(false);
   };
 
@@ -678,16 +681,14 @@ function DriverApp({ user, onLogout }) {
         {/* HEADER */}
         <div className="header">
           <div className="header-inner">
-            <span className="logo">Keeper Tracker<span className="logo-beta">{user.username}</span></span>
-            <div style={{display:"flex",alignItems:"center",gap:10}}>
-              <div className="sync-indicator">
+            <span className="logo">Keeper Tracker</span>
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              <div title={!isOnline?"Offline":syncing?"Syncing...":"Cloud ✓"} style={{display:"flex",alignItems:"center",gap:4}}>
                 <div className={`sync-dot ${!isOnline?"offline":syncing?"syncing":""}`}/>
-                <span style={{color:!isOnline?theme.danger:syncing?theme.warning:theme.textMuted}}>
-                  {!isOnline?"Offline":syncing?"Sync...":"Cloud ✓"}
-                </span>
+                <span style={{fontSize:11,color:!isOnline?theme.danger:syncing?theme.warning:theme.success}}>{!isOnline?"Offline":"Cloud"}</span>
               </div>
               <button className="help-btn" onClick={()=>setShowHelp(true)}>?</button>
-              <button onClick={onLogout} title="Αποσύνδεση" style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.7)",fontSize:20,padding:"4px 2px",lineHeight:1}}>⏏</button>
+              <button onClick={onLogout} title="Αποσύνδεση" style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.7)",fontSize:18,padding:"4px 2px",lineHeight:1}}>⏏</button>
             </div>
           </div>
         </div>
