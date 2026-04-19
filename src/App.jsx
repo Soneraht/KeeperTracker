@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import * as XLSX from "xlsx";
-import { db, collection, doc, setDoc, deleteDoc, onSnapshot, getDocs } from "./firebase";
+import { db, auth, collection, doc, setDoc, deleteDoc, onSnapshot, getDocs, signInAnonymously } from "./firebase";
 
 const theme = {
   bg: "#0a0f1e",
@@ -1095,6 +1095,7 @@ function LoginPage({ onLogin }) {
       } else if (found.active === false) {
         setError("Ο λογαριασμός είναι ανενεργός");
       } else {
+        await signInAnonymously(auth);
         onLogin(found);
       }
     } catch (e) {
