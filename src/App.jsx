@@ -270,7 +270,7 @@ function ArrivalModal({ rawAddress, knownEntry, locations, onDone, onCancel }) {
           )}
           {filtered.map(loc => (
             <div key={loc.key}
-              onClick={()=>onDone(loc.address, loc.name)}
+              onClick={()=>onDone(loc.address, loc.name, true)}
               style={{padding:"12px 14px",borderBottom:"1px solid #1e3a5f44",cursor:"pointer",borderRadius:8,marginBottom:4,background:"#1a2235"}}
             >
               <div style={{fontSize:14,fontWeight:600,color:"#e8edf5"}}>{loc.name}</div>
@@ -581,12 +581,15 @@ function DriverApp({ user, onLogout }) {
     setArrivalData({rawAddress, key, knownEntry: key&&locations[key] ? locations[key] : null});
   };
 
-  const handleArrivalDone = async (finalAddress, clientName) => {
+  const handleArrivalDone = async (finalAddress, clientName, skipLocationSave = false) => {
     if (!activeRoute) return;
     setSyncing(true);
-    if (arrivalData.key) await saveLocation(uid, arrivalData.key,{address:finalAddress, name:clientName});
+    // Bug fix: only save location when it's a new GPS point, not when selecting from saved list
+    if (!skipLocationSave && arrivalData.key) await saveLocation(uid, arrivalData.key,{address:finalAddress, name:clientName});
     const completed = {...activeRoute, gpsKey:arrivalData.key, end:{location:finalAddress, time:now(), label:clientName, timestamp:Date.now()}};
     await saveRoute(uid, completed);
+    // Bug fix: always clear the active route from Firestore so refresh/lock doesn't restore it
+    await clearActiveRoute(uid);
     setSyncing(false);
     setLastArrival({ location: finalAddress, clientName, time: now() });
     setActiveRoute(null); setArrivalData(null);
@@ -743,20 +746,20 @@ function DriverApp({ user, onLogout }) {
                 <div className="active-route-card" style={{borderColor:theme.warning,background:"linear-gradient(135deg,#1a1200 0%,#0f0900 100%)"}}>
                   <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12,justifyContent:"center"}}>
                     <span style={{fontSize:18}}>⏳</span>
-                    <span style={{fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:12,color:theme.warning,letterSpacing:"0.5px",textTransform:"uppercase"}}>Αναμονή επόμενης διαδρομής</span>
+                    <span style={{fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:12,color:theme.warning,letterSpacing:"0.5px",textTransform:"uppercase"}}>Αναμονη επομενης διαδρομης</span>
                   </div>
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
                     <div>
-                      <div className="route-info-label">Πελάτης</div>
+                      <div className="route-info-label">Πελατης</div>
                       <div className="route-info-value" style={{color:theme.accent}}>{lastArrival.clientName||"—"}</div>
                     </div>
                     <div>
-                      <div className="route-info-label">Ώρα άφιξης</div>
+                      <div className="route-info-label">Ωρα αφιξης</div>
                       <div className="route-info-value">{lastArrival.time}</div>
                     </div>
                   </div>
                   <div>
-                    <div className="route-info-label">Τελευταία τοποθεσία</div>
+                    <div className="route-info-label">Τελευταια τοποθεσια</div>
                     <div className="route-info-value" style={{fontSize:12,whiteSpace:"normal"}}>{lastArrival.location}</div>
                   </div>
                 </div>
@@ -1262,7 +1265,7 @@ function AdminPanel({ user, onLogout }) {
         <div className="admin-header">
           <div className="logo">Keeper Tracker <span className="logo-beta">{user.role}</span></div>
           <div style={{display:'flex',alignItems:'center',gap:8}}>
-            <button className="help-btn" onClick={()=>setShowHelp(true)}>?</button>
+            {isAdmin && <button className="help-btn" onClick={()=>setShowHelp(true)}>?</button>}
             <button onClick={onLogout} title="Αποσύνδεση" style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.8)",padding:"4px 6px",lineHeight:1,display:"flex",alignItems:"center"}}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></button>
           </div>
         </div>
@@ -1304,7 +1307,7 @@ function AdminPanel({ user, onLogout }) {
         {view === "accounts" && isAdmin && (
           <div className="content">
             <div className="card">
-              <div className="section-title">➕ Νέος Λογαριασμός</div>
+              <div className="section-title">➕ Νεος Λογαριασμος</div>
               <div className="input-group"><label className="input-label">Username</label><input className="input" value={newUser.username} onChange={e=>setNewUser({...newUser, username:e.target.value})} placeholder="π.χ. driver1"/></div>
               <div className="input-group"><label className="input-label">Password</label><input className="input" value={newUser.password} onChange={e=>setNewUser({...newUser, password:e.target.value})} placeholder="password"/></div>
               <div className="input-group"><label className="input-label">Ρόλος</label>
@@ -1317,7 +1320,7 @@ function AdminPanel({ user, onLogout }) {
             </div>
 
             <div className="card">
-              <div className="section-title">🗑️ Υπάρχοντες Λογαριασμοί</div>
+              <div className="section-title">🗑️ Υπαρχοντες Λογαριασμοι</div>
               {visibleAccounts.length === 0 ? <div className="empty" style={{padding:'12px 0'}}>Δεν υπάρχουν λογαριασμοί</div> :
                 visibleAccounts.map(u => (
                   <div key={u.id} className="driver-row">
@@ -1337,7 +1340,7 @@ function AdminPanel({ user, onLogout }) {
         {view === "live" && (
           <div className="content">
             <div className="card">
-              <div className="section-title">🧭 Επιλογή Οδηγού</div>
+              <div className="section-title">🧭 Επιλογη Οδηγου</div>
               <select className="select-input" value={selectedDriverId} onChange={e=>setSelectedDriverId(e.target.value)}>
                 <option value="">— Επίλεξε οδηγό —</option>
                 {driverAccounts.map(u => <option key={u.id} value={u.id}>{u.username}</option>)}
@@ -1347,6 +1350,21 @@ function AdminPanel({ user, onLogout }) {
 
             {selectedDriverId && (
               <>
+                {/* STATUS BADGE */}
+                <div style={{
+                  display:'flex', alignItems:'center', gap:10, padding:'12px 16px',
+                  borderRadius:10, marginBottom:14,
+                  background: driverActive
+                    ? 'linear-gradient(135deg,#0d2545 0%,#0a1929 100%)'
+                    : 'linear-gradient(135deg,#1a1200 0%,#0f0900 100%)',
+                  border: `1px solid ${driverActive ? theme.primary : theme.warning}`,
+                }}>
+                  {driverActive
+                    ? <><span className="pulse-dot"/><span style={{fontFamily:'Syne,sans-serif',fontWeight:700,fontSize:13,color:theme.accent,textTransform:'uppercase',letterSpacing:'0.5px'}}>Διαδρομη σε εξελιξη</span></>
+                    : <><span style={{fontSize:16}}>⏳</span><span style={{fontFamily:'Syne,sans-serif',fontWeight:700,fontSize:13,color:theme.warning,textTransform:'uppercase',letterSpacing:'0.5px'}}>Αναμονη επομενης διαδρομης</span></>
+                  }
+                </div>
+
                 {lastLocation && <LiveView address={lastLocation} />}
 
                 {driverActive && (
@@ -1359,7 +1377,7 @@ function AdminPanel({ user, onLogout }) {
                 )}
 
                 <div className="card" style={{padding:0,overflow:'hidden'}}>
-                  <div style={{padding:'16px 18px 8px'}} className="section-title">📋 Ιστορικό Δρομολογίων</div>
+                  <div style={{padding:'16px 18px 8px'}} className="section-title">📋 Ιστορικο Δρομολογιων</div>
                   {driverRoutes.length===0 ? <div className="empty"><div className="empty-icon">📋</div>Δεν υπάρχουν δρομολόγια</div> :
                     <table className="route-table"><thead><tr><th style={{width:'9%'}}>#</th><th style={{width:'33%'}}>ΠΕΛΑΤΗΣ</th><th style={{width:'24%'}}>ΗΜ/ΝΙΑ</th><th style={{width:'17%'}}>ΩΡΑ</th><th style={{width:'17%'}}>ΛΗΞΗ</th></tr></thead><tbody>
                       {driverRoutes.map((r,i)=><tr key={r.id}><td style={{color:theme.textMuted}}>{i+1}</td><td style={{textAlign:'left'}}><span className="client-badge">{r.end?.label||'—'}</span></td><td style={{color:theme.textMuted,fontSize:11}}>{r.start.time?.split(',')[0]}</td><td style={{color:theme.textMuted,fontSize:11}}>{r.start.time?.split(',')[1]?.trim()}</td><td style={{color:theme.textMuted,fontSize:11}}>{r.end?.time?.split(',')[1]?.trim()||'—'}</td></tr>)}
@@ -1368,7 +1386,7 @@ function AdminPanel({ user, onLogout }) {
                 </div>
 
                 <div className="card" style={{padding:0,overflow:'hidden'}}>
-                  <div style={{padding:'16px 18px 8px'}} className="section-title">⛽ Ανεφοδιασμοί</div>
+                  <div style={{padding:'16px 18px 8px'}} className="section-title">⛽ Ανεφοδιασμοι</div>
                   {driverFuels.length===0 ? <div className="empty" style={{padding:'20px'}}>Δεν υπάρχουν ανεφοδιασμοί</div> :
                     <table className="route-table"><thead><tr><th style={{width:'26%'}}>ΗΜ/ΝΙΑ</th><th style={{width:'17%'}}>L</th><th style={{width:'17%'}}>€</th><th style={{width:'18%'}}>ΧΛΜ</th><th style={{width:'22%'}}>ΑΠΟΔ.</th></tr></thead><tbody>
                       {driverFuels.map(f=><tr key={f.id}><td style={{color:theme.textMuted,fontSize:11}}>{f.date}</td><td>{f.liters}</td><td style={{color:theme.accent}}>{f.amount}</td><td style={{color:theme.textMuted}}>{f.km}</td><td style={{color:theme.textMuted,fontSize:11}}>{f.receipt}</td></tr>)}
@@ -1377,7 +1395,7 @@ function AdminPanel({ user, onLogout }) {
                 </div>
 
                 <div className="card" style={{padding:0,overflow:'hidden'}}>
-                  <div style={{padding:'16px 18px 8px'}} className="section-title">🔧 Συντήρηση Οχήματος</div>
+                  <div style={{padding:'16px 18px 8px'}} className="section-title">🔧 Συντηρηση Οχηματος</div>
                   {driverServices.length===0 ? <div className="empty" style={{padding:'20px'}}>Δεν υπάρχουν service entries</div> :
                     <div style={{padding:'0 18px 10px'}}>
                       {driverServices.map(s => <div key={s.id} className="driver-row"><div><div style={{fontSize:13,fontWeight:700,color:theme.text}}>{s.description}</div><div style={{fontSize:11,color:theme.textMuted}}>{s.date}{s.km ? ` • ${s.km} km` : ''}</div></div></div>)}
@@ -1387,7 +1405,7 @@ function AdminPanel({ user, onLogout }) {
 
                 {driverProfile && (
                   <div className="card">
-                    <div className="section-title">🚗 Στοιχεία Οχήματος</div>
+                    <div className="section-title">🚗 Στοιχεια Οχηματος</div>
                     <div style={{fontSize:13,lineHeight:1.9}}>
                       <div><span style={{color:theme.textMuted}}>Οδηγός: </span>{driverProfile.firstName} {driverProfile.lastName}</div>
                       <div><span style={{color:theme.textMuted}}>Πινακίδα: </span>{driverProfile.plate}</div>
@@ -1405,7 +1423,7 @@ function AdminPanel({ user, onLogout }) {
         {view === "changepass" && (
           <div className="content">
             <div className="card">
-              <div className="section-title">🔑 Αλλαγή Κωδικού</div>
+              <div className="section-title">🔑 Αλλαγη Κωδικου</div>
               <div style={{fontSize:13,color:theme.textMuted,marginBottom:16}}>Λογαριασμός: <strong style={{color:theme.text}}>{user.username}</strong></div>
               <ChangePasswordForm userId={user.id} onBack={()=>setView("home")} />
             </div>
