@@ -410,6 +410,7 @@ function DriverApp({ user, onLogout }) {
   const todayKey = new Date().toLocaleDateString("el-GR");
 
   const [tab,          setTab]          = useState("record");
+  const [lastArrival,  setLastArrival]  = useState(null);
   const [showHelp,     setShowHelp]     = useState(false);
   const [syncing,      setSyncing]      = useState(false);
   const [isOnline,     setIsOnline]     = useState(navigator.onLine);
@@ -545,6 +546,7 @@ function DriverApp({ user, onLogout }) {
       fromLastClient: lastRoute.end.label || null,
       start: { location: lastRoute.end.location, time: now(), timestamp: Date.now() }
     };
+    setLastArrival(null);
     setActiveRoute(newRoute);
     await saveRoute(uid, newRoute);
     await saveActiveRoute(uid, newRoute);
@@ -586,6 +588,7 @@ function DriverApp({ user, onLogout }) {
     const completed = {...activeRoute, gpsKey:arrivalData.key, end:{location:finalAddress, time:now(), label:clientName, timestamp:Date.now()}};
     await saveRoute(uid, completed);
     setSyncing(false);
+    setLastArrival({ location: finalAddress, clientName, time: now() });
     setActiveRoute(null); setArrivalData(null);
     releaseWakeLock();
   };
@@ -599,6 +602,7 @@ function DriverApp({ user, onLogout }) {
     await saveRoute(uid, completed);
     await clearActiveRoute(uid);
     setSyncing(false);
+    setLastArrival(null);
     setActiveRoute(null);
     releaseWakeLock();
   };
@@ -703,7 +707,7 @@ function DriverApp({ user, onLogout }) {
                 <span style={{fontSize:11,color:!isOnline?theme.danger:syncing?theme.warning:theme.success}}>{!isOnline?"Offline":"Cloud"}</span>
               </div>
               <button className="help-btn" onClick={()=>setShowHelp(true)}>?</button>
-              <button onClick={onLogout} title="Αποσύνδεση" style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.7)",fontSize:18,padding:"4px 2px",lineHeight:1}}>⏏</button>
+              <button onClick={onLogout} title="Αποσύνδεση" style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.8)",padding:"4px 2px",lineHeight:1,display:"flex",alignItems:"center"}}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></button>
             </div>
           </div>
         </div>
@@ -735,6 +739,28 @@ function DriverApp({ user, onLogout }) {
           {/* ── RECORD ── */}
           {tab==="record" && (
             <div>
+              {lastArrival && !activeRoute && (
+                <div className="active-route-card" style={{borderColor:theme.warning,background:"linear-gradient(135deg,#1a1200 0%,#0f0900 100%)"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12,justifyContent:"center"}}>
+                    <span style={{fontSize:18}}>⏳</span>
+                    <span style={{fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:12,color:theme.warning,letterSpacing:"0.5px",textTransform:"uppercase"}}>Αναμονή επόμενης διαδρομής</span>
+                  </div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+                    <div>
+                      <div className="route-info-label">Πελάτης</div>
+                      <div className="route-info-value" style={{color:theme.accent}}>{lastArrival.clientName||"—"}</div>
+                    </div>
+                    <div>
+                      <div className="route-info-label">Ώρα άφιξης</div>
+                      <div className="route-info-value">{lastArrival.time}</div>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="route-info-label">Τελευταία τοποθεσία</div>
+                    <div className="route-info-value" style={{fontSize:12,whiteSpace:"normal"}}>{lastArrival.location}</div>
+                  </div>
+                </div>
+              )}
               {activeRoute ? (
                 <div className="active-route-card">
                   <div style={{marginBottom:14}}>
@@ -1234,11 +1260,10 @@ function AdminPanel({ user, onLogout }) {
       <style>{css}</style>
       <div className="admin-wrap">
         <div className="admin-header">
-<span className="logo">
-  Keeper Tracker
-</span>            <div style={{display:'flex',alignItems:'center',gap:8}}>
+          <div className="logo">Keeper Tracker <span className="logo-beta">{user.role}</span></div>
+          <div style={{display:'flex',alignItems:'center',gap:8}}>
             <button className="help-btn" onClick={()=>setShowHelp(true)}>?</button>
-            <button className="btn btn-secondary btn-sm" onClick={onLogout}>Έξοδος</button>
+            <button onClick={onLogout} title="Αποσύνδεση" style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.8)",padding:"4px 6px",lineHeight:1,display:"flex",alignItems:"center"}}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></button>
           </div>
         </div>
 
@@ -1406,27 +1431,22 @@ export default function App() {
   }, []);
 
   const [authUser, setAuthUserRaw] = useState(() => {
-    try { const s = sessionStorage.getItem("authUser"); return s ? JSON.parse(s) : null; }
+    try { const s = localStorage.getItem("authUser"); return s ? JSON.parse(s) : null; }
     catch { return null; }
   });
 
   const setAuthUser = (user) => {
-    if (user) { try { sessionStorage.setItem("authUser", JSON.stringify(user)); } catch {} }
-    else       { try { sessionStorage.removeItem("authUser"); } catch {} }
+    if (user) { try { localStorage.setItem("authUser", JSON.stringify(user)); } catch {} }
+    else       { try { localStorage.removeItem("authUser"); } catch {} }
     setAuthUserRaw(user);
   };
 
   // Validate stored session — clear if account deleted from Firestore
   useEffect(() => {
     if (!authUser) return;
-    // Wait for Firebase Auth to be ready before querying Firestore
-    const unsub = auth.onAuthStateChanged((firebaseUser) => {
-      unsub();
-      if (!firebaseUser) return;
-      getDocs(collection(db, "users")).then(snap => {
-        if (!snap.docs.some(d => d.id === authUser.id)) setAuthUser(null);
-      }).catch(() => {});
-    });
+    getDocs(collection(db, "users")).then(snap => {
+      if (!snap.docs.some(d => d.id === authUser.id)) setAuthUser(null);
+    }).catch(() => {});
   }, []);
 
   if (!authUser) return <LoginPage onLogin={setAuthUser} />;
