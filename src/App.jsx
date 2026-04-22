@@ -294,32 +294,26 @@ function ArrivalModal({ rawAddress, knownEntry, locations, onDone, onCancel }) {
       <div className="address-box">{rawAddress}</div>
       <div className="btn-row">
         <button className="btn btn-success" onClick={()=>{setFinalAddress(rawAddress);setStep("name");}}>✓ Σωστή</button>
-        <button className="btn btn-warning" onClick={()=>setStep("edit_number")}>✏️ Αριθμός</button>
+        <button className="btn btn-warning" onClick={()=>{setEditedNumber(rawAddress);setStep("edit_number");}}>✏️ Edit</button>
       </div>
       <button className="btn btn-secondary" style={{marginTop:10}} onClick={()=>setStep("pick_location")}>← Πίσω</button>
     </div></div>
   );
 
-  // Step: edit_number
+  // Step: edit_number (full address edit)
   if (step === "edit_number") {
-    const streetOnly = rawAddress.replace(/,.*/, "").replace(/\d+/, "").trim();
     return (
       <div className="overlay"><div className="modal" onClick={e=>e.stopPropagation()}>
-        <div className="modal-title">✏️ Διόρθωση</div>
-        <div className="modal-subtitle"><strong style={{color:"#e8edf5"}}>{streetOnly}</strong></div>
-        <div className="input-group"><label className="input-label">Αριθμός</label>
-          <input className="input" type="text" placeholder="π.χ. 12" value={editedNumber}
+        <div className="modal-title">✏️ Επεξεργασία Διεύθυνσης</div>
+        <div className="modal-subtitle">Διόρθωσε ολόκληρη τη διεύθυνση</div>
+        <div className="input-group"><label className="input-label">Διεύθυνση</label>
+          <input className="input" type="text" placeholder="π.χ. Λεωφόρος Αθηνών 12, Αθήνα" value={editedNumber}
             onChange={e=>setEditedNumber(e.target.value)} autoFocus/>
         </div>
         <div className="btn-row">
           <button className="btn btn-primary" onClick={()=>{
-            let addr = rawAddress;
-            if (editedNumber) {
-              if (/,/.test(rawAddress)) addr = rawAddress.replace(/,/, ` ${editedNumber},`);
-              else if (rawAddress.includes(" ")) addr = rawAddress.replace(/ /, ` ${editedNumber} `);
-              else addr = rawAddress + " " + editedNumber;
-            }
-            setFinalAddress(addr); setStep("name");
+            setFinalAddress(editedNumber.trim() || rawAddress);
+            setStep("name");
           }}>✓ ΟΚ</button>
           <button className="btn btn-secondary" onClick={()=>setStep("confirm_address")}>Πίσω</button>
         </div>
@@ -635,6 +629,7 @@ function DriverApp({ user, onLogout }) {
   };
 
   const [editingFuel, setEditingFuel] = useState(null);
+  const [fuelFilters, setFuelFilters] = useState({month:"", year:""});
   const updateFuel = async (form) => {
     setSyncing(true);
     try { await saveFuelEntry(uid, {...editingFuel, ...form}); } catch(e) { console.error(e); }
@@ -750,16 +745,16 @@ function DriverApp({ user, onLogout }) {
                   </div>
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
                     <div>
-                      <div className="route-info-label">Πελατης</div>
+                      <div className="route-info-label">Πελάτης</div>
                       <div className="route-info-value" style={{color:theme.accent}}>{lastArrival.clientName||"—"}</div>
                     </div>
                     <div>
-                      <div className="route-info-label">Ωρα αφιξης</div>
+                      <div className="route-info-label">Ώρα άφιξης</div>
                       <div className="route-info-value">{lastArrival.time}</div>
                     </div>
                   </div>
                   <div>
-                    <div className="route-info-label">Τελευταια τοποθεσια</div>
+                    <div className="route-info-label">Τελευταία τοποθεσία</div>
                     <div className="route-info-value" style={{fontSize:12,whiteSpace:"normal"}}>{lastArrival.location}</div>
                   </div>
                 </div>
@@ -903,34 +898,46 @@ function DriverApp({ user, onLogout }) {
                 <div className="stat-box"><div className="stat-label">ΣΥΝΟΛΙΚΟ ΚΟΣΤΟΣ</div><div className="stat-value">{totalFuelCost.toFixed(1)}<span className="stat-unit">€</span></div></div>
                 <div className="stat-box"><div className="stat-label">ΣΥΝΟΛΙΚΑ ΛΙΤΡΑ</div><div className="stat-value">{totalFuelLiters.toFixed(1)}<span className="stat-unit">L</span></div></div>
               </div>
+              <div className="filter-row" style={{gridTemplateColumns:"1fr 1fr"}}>
+                <input className="filter-input" placeholder="Μήνας (1-12)" type="number" min="1" max="12" value={fuelFilters.month} onChange={e=>setFuelFilters({...fuelFilters,month:e.target.value})}/>
+                <input className="filter-input" placeholder="Έτος" type="number" value={fuelFilters.year} onChange={e=>setFuelFilters({...fuelFilters,year:e.target.value})}/>
+              </div>
               <div className="card" style={{padding:0,overflow:"hidden"}}>
-                {fuels.length===0 ? (
-                  <div className="empty"><div className="empty-icon">⛽</div>Κανένας ανεφοδιασμός</div>
-                ) : (
-                  <table className="route-table">
-                    <thead><tr>
-                      <th style={{width:"20%"}}>ΗΜ/ΝΙΑ</th>
-                      <th style={{width:"13%"}}>ΛΙΤΡΑ</th>
-                      <th style={{width:"13%"}}>ΠΟΣΟ</th>
-                      <th style={{width:"13%"}}>ΧΛΜ</th>
-                      <th style={{width:"21%"}}>ΑΡ.ΤΙΜ</th>
-                      <th style={{width:"20%"}}></th>
-                    </tr></thead>
-                    <tbody>{fuels.map(f=>(
-                      <tr key={f.id}>
-                        <td style={{color:"#8899b0",fontSize:11}}>{f.date}</td>
-                        <td>{f.liters}L</td>
-                        <td style={{color:"#38bdf8"}}>{f.amount}€</td>
-                        <td style={{color:"#8899b0"}}>{f.km||"—"}</td>
-                        <td style={{color:"#8899b0",fontSize:11}}>{f.receipt||"—"}</td>
-                        <td style={{display:"flex",gap:2,justifyContent:"center"}}>
-                          <button className="icon-btn" style={{fontSize:12,padding:"2px 4px"}} onClick={()=>setEditingFuel(f)}>✏️</button>
-                          <button className="icon-btn icon-btn-del" style={{fontSize:12,padding:"2px 4px"}} onClick={()=>{if(window.confirm("Διαγραφή;"))deleteFuel(f.id);}}>🗑️</button>
-                        </td>
-                      </tr>
-                    ))}</tbody>
-                  </table>
-                )}
+                {(() => {
+                  const filtered = fuels.filter(f => {
+                    const d = new Date(f.date);
+                    const mOk = fuelFilters.month ? d.getMonth()+1 === Number(fuelFilters.month) : true;
+                    const yOk = fuelFilters.year  ? d.getFullYear() === Number(fuelFilters.year)  : true;
+                    return mOk && yOk;
+                  });
+                  return filtered.length===0 ? (
+                    <div className="empty"><div className="empty-icon">⛽</div>Κανένας ανεφοδιασμός</div>
+                  ) : (
+                    <table className="route-table">
+                      <thead><tr>
+                        <th style={{width:"20%"}}>ΗΜ/ΝΙΑ</th>
+                        <th style={{width:"13%"}}>ΛΙΤΡΑ</th>
+                        <th style={{width:"13%"}}>ΠΟΣΟ</th>
+                        <th style={{width:"13%"}}>ΧΛΜ</th>
+                        <th style={{width:"21%"}}>ΑΡ.ΤΙΜ</th>
+                        <th style={{width:"20%"}}></th>
+                      </tr></thead>
+                      <tbody>{filtered.map(f=>(
+                        <tr key={f.id}>
+                          <td style={{color:"#8899b0",fontSize:11}}>{f.date}</td>
+                          <td>{f.liters}L</td>
+                          <td style={{color:"#38bdf8"}}>{f.amount}€</td>
+                          <td style={{color:"#8899b0"}}>{f.km||"—"}</td>
+                          <td style={{color:"#8899b0",fontSize:11}}>{f.receipt||"—"}</td>
+                          <td style={{display:"flex",gap:2,justifyContent:"center"}}>
+                            <button className="icon-btn" style={{fontSize:12,padding:"2px 4px"}} onClick={()=>setEditingFuel(f)}>✏️</button>
+                            <button className="icon-btn icon-btn-del" style={{fontSize:12,padding:"2px 4px"}} onClick={()=>{if(window.confirm("Διαγραφή;"))deleteFuel(f.id);}}>🗑️</button>
+                          </td>
+                        </tr>
+                      ))}</tbody>
+                    </table>
+                  );
+                })()}
               </div>
             </div>
           )}
@@ -1213,6 +1220,7 @@ function AdminPanel({ user, onLogout }) {
   const [driverServices, setDriverServices] = useState([]);
   const [driverActive, setDriverActive] = useState(null);
   const [driverProfile, setDriverProfile] = useState(null);
+  const [routeFilters, setRouteFilters] = useState({client:"", month:"", year:""});
 
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "users"), snap => {
@@ -1378,10 +1386,26 @@ function AdminPanel({ user, onLogout }) {
 
                 <div className="card" style={{padding:0,overflow:'hidden'}}>
                   <div style={{padding:'16px 18px 8px'}} className="section-title">📋 Ιστορικο Δρομολογιων</div>
+                  <div style={{padding:'0 12px 10px',display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6}}>
+                    <input className="filter-input" placeholder="Πελάτης" value={routeFilters.client} onChange={e=>{setRouteFilters({...routeFilters,client:e.target.value});}}/>
+                    <input className="filter-input" placeholder="Μήνας" type="number" min="1" max="12" value={routeFilters.month} onChange={e=>setRouteFilters({...routeFilters,month:e.target.value})}/>
+                    <input className="filter-input" placeholder="Έτος" type="number" value={routeFilters.year} onChange={e=>setRouteFilters({...routeFilters,year:e.target.value})}/>
+                  </div>
                   {driverRoutes.length===0 ? <div className="empty"><div className="empty-icon">📋</div>Δεν υπάρχουν δρομολόγια</div> :
-                    <table className="route-table"><thead><tr><th style={{width:'9%'}}>#</th><th style={{width:'33%'}}>ΠΕΛΑΤΗΣ</th><th style={{width:'24%'}}>ΗΜ/ΝΙΑ</th><th style={{width:'17%'}}>ΩΡΑ</th><th style={{width:'17%'}}>ΛΗΞΗ</th></tr></thead><tbody>
-                      {driverRoutes.map((r,i)=><tr key={r.id}><td style={{color:theme.textMuted}}>{i+1}</td><td style={{textAlign:'left'}}><span className="client-badge">{r.end?.label||'—'}</span></td><td style={{color:theme.textMuted,fontSize:11}}>{r.start.time?.split(',')[0]}</td><td style={{color:theme.textMuted,fontSize:11}}>{r.start.time?.split(',')[1]?.trim()}</td><td style={{color:theme.textMuted,fontSize:11}}>{r.end?.time?.split(',')[1]?.trim()||'—'}</td></tr>)}
-                    </tbody></table>
+                    (() => {
+                      const filtered = [...driverRoutes].reverse().filter(r => {
+                        const cOk = routeFilters.client ? (r.end?.label||"").toLowerCase().includes(routeFilters.client.toLowerCase()) : true;
+                        const d = new Date(r.start?.timestamp||0);
+                        const mOk = routeFilters.month ? d.getMonth()+1===Number(routeFilters.month) : true;
+                        const yOk = routeFilters.year  ? d.getFullYear()===Number(routeFilters.year) : true;
+                        return cOk && mOk && yOk;
+                      }).slice(0,15);
+                      return filtered.length===0
+                        ? <div className="empty" style={{padding:'16px'}}>Δεν βρέθηκαν αποτελέσματα</div>
+                        : <table className="route-table"><thead><tr><th style={{width:'9%'}}>#</th><th style={{width:'33%'}}>ΠΕΛΑΤΗΣ</th><th style={{width:'24%'}}>ΗΜ/ΝΙΑ</th><th style={{width:'17%'}}>ΩΡΑ</th><th style={{width:'17%'}}>ΛΗΞΗ</th></tr></thead><tbody>
+                          {filtered.map((r,i)=><tr key={r.id}><td style={{color:theme.textMuted}}>{i+1}</td><td style={{textAlign:'left'}}><span className="client-badge">{r.end?.label||'—'}</span></td><td style={{color:theme.textMuted,fontSize:11}}>{r.start.time?.split(',')[0]}</td><td style={{color:theme.textMuted,fontSize:11}}>{r.start.time?.split(',')[1]?.trim()}</td><td style={{color:theme.textMuted,fontSize:11}}>{r.end?.time?.split(',')[1]?.trim()||'—'}</td></tr>)}
+                        </tbody></table>;
+                    })()
                   }
                 </div>
 
