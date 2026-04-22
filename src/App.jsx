@@ -134,6 +134,24 @@ const css = `
   .driver-row:last-child{border-bottom:none}
   .section-title{font-family:'Syne',sans-serif;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:${theme.textMuted};margin-bottom:12px;display:flex;align-items:center;gap:8px}
   .back-btn{background:none;border:none;color:rgba(255,255,255,0.8);font-size:22px;cursor:pointer;padding:4px 8px;line-height:1}
+  /* Requests */
+  .req-card{border-radius:12px;padding:14px 16px;margin-bottom:12px;border:2px solid}
+  .req-pending{background:#FFD600;border-color:#C8AA00;color:#000}
+  .req-pending .req-desc{color:#000 !important}
+  .req-pending .req-meta{color:#444 !important}
+  .req-pending .input{background:#fff;color:#000;border-color:#C8AA00}
+  .req-accepted{background:linear-gradient(135deg,#0d2545 0%,#0a1929 100%);border-color:${theme.primary}}
+  .req-declined{background:rgba(239,68,68,0.08);border-color:${theme.danger}}
+  .req-completed{background:rgba(34,197,94,0.08);border-color:${theme.success}}
+  .req-status{display:inline-flex;align-items:center;gap:5px;font-family:'Syne',sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;padding:3px 8px;border-radius:20px}
+  .req-status-pending{background:rgba(0,0,0,0.15);color:#000}
+  .req-status-accepted{background:rgba(29,110,245,0.2);color:${theme.accent}}
+  .req-status-declined{background:rgba(239,68,68,0.2);color:${theme.danger}}
+  .req-status-completed{background:rgba(34,197,94,0.2);color:${theme.success}}
+  .req-desc{font-size:14px;color:${theme.text};margin:8px 0 4px;font-weight:600;line-height:1.4}
+  .req-meta{font-size:11px;color:${theme.textMuted}}
+  .req-comment{font-size:12px;color:${theme.accent};margin-top:6px;font-style:italic}
+  .notif-badge{position:absolute;top:-4px;right:-4px;background:${theme.danger};color:#fff;border-radius:50%;width:16px;height:16px;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center}
 `;
 
 // ─── Firebase helpers ─────────────────────────────────────────────
@@ -146,6 +164,55 @@ const saveServiceEntry = (uid, s)   => setDoc(doc(db, driverCol(uid,"services"),
 const delService       = (uid, id)  => deleteDoc(doc(db, driverCol(uid,"services"), String(id)));
 const saveActiveRoute  = (uid, r)   => setDoc(doc(db, driverCol(uid,"activeRoute"), "current"), r);
 const clearActiveRoute = (uid)      => deleteDoc(doc(db, driverCol(uid,"activeRoute"), "current"));
+
+// ─── Request helpers ──────────────────────────────────────────────
+const saveRequest   = (r)  => setDoc(doc(db, "requests", String(r.id)), r);
+const updateRequest = (id, patch) => setDoc(doc(db, "requests", String(id)), patch, {merge:true});
+const deleteRequest = (id) => deleteDoc(doc(db, "requests", String(id)));
+
+// ─── Sound notification ───────────────────────────────────────────
+const playNotifSound = () => {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    // Urgent 3-pulse alarm: high-low-high, loud and distinct
+    const pulses = [
+      {freq:1400, start:0.00, dur:0.18},
+      {freq:900,  start:0.22, dur:0.14},
+      {freq:1400, start:0.40, dur:0.18},
+      {freq:900,  start:0.62, dur:0.14},
+      {freq:1600, start:0.80, dur:0.25},
+    ];
+    pulses.forEach(({freq, start, dur}) => {
+      const osc  = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.type = "square";
+      osc.frequency.setValueAtTime(freq, ctx.currentTime + start);
+      gain.gain.setValueAtTime(0.55, ctx.currentTime + start);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + dur);
+      osc.start(ctx.currentTime + start);
+      osc.stop(ctx.currentTime + start + dur + 0.01);
+    });
+  } catch(e) {}
+};
+
+// Softer sound for sales (status update notification)
+const playSoftNotifSound = () => {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    [660, 880].forEach((freq, i) => {
+      const osc  = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(freq, ctx.currentTime + i * 0.18);
+      gain.gain.setValueAtTime(0.3, ctx.currentTime + i * 0.18);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.18 + 0.16);
+      osc.start(ctx.currentTime + i * 0.18);
+      osc.stop(ctx.currentTime + i * 0.18 + 0.17);
+    });
+  } catch(e) {}
+};
 
 // ─── LiveView ─────────────────────────────────────────────────────
 function LiveView({ address }) {
@@ -412,6 +479,7 @@ function DriverApp({ user, onLogout }) {
   const [routes,       setRoutes]       = useState([]);
   const [allRoutes,    setAllRoutes]    = useState([]);
   const [activeRoute,  setActiveRoute]  = useState(null);
+  const [routeReady,   setRouteReady]   = useState(false);
   const [locations,    setLocations]    = useState({});
   const [fuels,        setFuels]        = useState([]);
   const [showFuel,     setShowFuel]     = useState(false);
@@ -423,6 +491,10 @@ function DriverApp({ user, onLogout }) {
   const [services, setServices] = useState([]);
   const [showServiceModal, setShowServiceModal] = useState(false);
   const [editingService, setEditingService] = useState(null);
+  const [myRequests, setMyRequests] = useState([]);
+  const [archivedRequests, setArchivedRequests] = useState([]);
+  const [reqComment, setReqComment] = useState({});
+  const prevReqIds = useState(() => new Set())[0];
 
   const now = () => new Date().toLocaleString("el-GR");
 
@@ -458,6 +530,7 @@ function DriverApp({ user, onLogout }) {
     const unsubActive = onSnapshot(collection(db, driverCol(uid,"activeRoute")), snap => {
       const cur = snap.docs.find(d=>d.id==="current");
       setActiveRoute(cur ? cur.data() : null);
+      setRouteReady(true);
     });
 
     const unsubRoutes = onSnapshot(collection(db, driverCol(uid,"routes")), (snap) => {
@@ -482,6 +555,45 @@ function DriverApp({ user, onLogout }) {
     });
 
     return () => { unsubRoutes(); unsubLocations(); unsubFuels(); unsubProfile(); unsubServices(); unsubActive(); };
+  }, []);
+
+  // ─── Requests listener ────────────────────────────────────────
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, "requests"), snap => {
+      const all = snap.docs.map(d => d.data());
+      const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
+
+      // Auto-delete declined requests older than 1 day
+      all.forEach(r => {
+        if (r.status === "declined" && r.respondedAt && r.respondedAt < oneDayAgo) {
+          deleteRequest(r.id).catch(()=>{});
+        }
+      });
+
+      // Active (non-archived) requests for this driver shown in record tab
+      const mine = all.filter(r =>
+        (r.targetDriverId === uid || r.targetDriverId === "all") &&
+        r.status !== "declined" &&
+        !r.archived
+      ).sort((a,b) => b.createdAt - a.createdAt);
+
+      // Archived completed requests shown in profile
+      const archived = all.filter(r =>
+        (r.targetDriverId === uid || r.assignedDriverId === uid) &&
+        r.archived === true
+      ).sort((a,b) => b.completedAt - a.completedAt);
+
+      mine.forEach(r => {
+        if (r.status === "pending" && !prevReqIds.has(String(r.id))) {
+          playNotifSound();
+        }
+        prevReqIds.add(String(r.id));
+      });
+
+      setMyRequests(mine);
+      setArchivedRequests(archived);
+    });
+    return () => unsub();
   }, []);
 
   // ─── Profile debounce save ────────────────────────────────────
@@ -737,6 +849,64 @@ function DriverApp({ user, onLogout }) {
           {/* ── RECORD ── */}
           {tab==="record" && (
             <div>
+              {/* ── REQUESTS ── */}
+              {myRequests.length > 0 && (
+                <div style={{marginBottom:4}}>
+                  {myRequests.map(r => (
+                    <div key={r.id} className={`req-card ${r.status==="pending"?"req-pending":r.status==="accepted"?"req-accepted":"req-completed"}`}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:4}}>
+                        <span className={`req-status req-status-${r.status}`}>
+                          {r.status==="pending"&&<>⏳ Νεο Αιτημα</>}
+                          {r.status==="accepted"&&<><span className="pulse-dot" style={{width:6,height:6}}/>Σε Εξελιξη</>}
+                          {r.status==="completed"&&<>✓ Ολοκληρωθηκε</>}
+                        </span>
+                        <span className="req-meta">{r.salesUsername}</span>
+                      </div>
+                      <div className="req-desc">{r.description}</div>
+                      <div className="req-meta">{new Date(r.createdAt).toLocaleString("el-GR")}</div>
+
+                      {r.status === "pending" && (
+                        <div style={{marginTop:10}}>
+                          <div className="input-group" style={{marginBottom:8}}>
+                            <input className="input" style={{fontSize:13,padding:"9px 12px"}}
+                              placeholder="Σχόλιο (προαιρετικό)..."
+                              value={reqComment[r.id]||""}
+                              onChange={e=>setReqComment({...reqComment,[r.id]:e.target.value})}/>
+                          </div>
+                          <div className="btn-row">
+                            <button className="btn btn-success btn-sm" style={{flex:1}} onClick={async()=>{
+                              await updateRequest(r.id,{status:"accepted",driverComment:reqComment[r.id]||"",assignedDriverId:uid,assignedDriverUsername:user.username,respondedAt:Date.now()});
+                              setReqComment({...reqComment,[r.id]:""});
+                            }}>✓ Αποδοχή</button>
+                            <button className="btn btn-danger btn-sm" style={{flex:1}} onClick={async()=>{
+                              await updateRequest(r.id,{status:"declined",assignedDriverId:uid,respondedAt:Date.now()});
+                            }}>✗ Άρνηση</button>
+                          </div>
+                        </div>
+                      )}
+
+                      {r.status === "accepted" && (
+                        <div style={{marginTop:8}}>
+                          {r.driverComment && <div className="req-comment">💬 {r.driverComment}</div>}
+                          <button className="btn btn-primary btn-sm" style={{marginTop:10,width:"100%"}} onClick={async()=>{
+                            await updateRequest(r.id,{status:"completed",completedAt:Date.now()});
+                          }}>🏁 Ολοκλήρωση</button>
+                        </div>
+                      )}
+
+                      {r.status === "completed" && (
+                        <div style={{marginTop:8}}>
+                          {r.driverComment && <div className="req-comment">💬 {r.driverComment}</div>}
+                          <button className="btn btn-sm" style={{marginTop:10,width:"100%",background:"#374151",color:"#e8edf5",border:"1px solid #4b5563"}} onClick={async()=>{
+                            await updateRequest(r.id,{archived:true});
+                          }}>📁 Αρχειοθέτηση</button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
               {lastArrival && !activeRoute && (
                 <div className="active-route-card" style={{borderColor:theme.warning,background:"linear-gradient(135deg,#1a1200 0%,#0f0900 100%)"}}>
                   <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12,justifyContent:"center"}}>
@@ -759,7 +929,13 @@ function DriverApp({ user, onLogout }) {
                   </div>
                 </div>
               )}
-              {activeRoute ? (
+              {!routeReady ? (
+                <div className="card" style={{textAlign:"center",padding:"28px 18px"}}>
+                  <div style={{fontSize:28,marginBottom:10}}>🔄</div>
+                  <div style={{fontFamily:"Syne,sans-serif",fontWeight:700,fontSize:13,color:theme.accent,textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:6}}>Επαναφορά κατάστασης</div>
+                  <div style={{fontSize:12,color:theme.textMuted}}>Παρακαλώ περιμένετε...</div>
+                </div>
+              ) : activeRoute ? (
                 <div className="active-route-card">
                   <div style={{marginBottom:14}}>
                     <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6,justifyContent:"center"}}>
@@ -1061,6 +1237,40 @@ function DriverApp({ user, onLogout }) {
                   </div>
                 </details>
               </div>
+
+              {/* ── ΑΡΧΕΙΟ ΑΙΤΗΜΑΤΩΝ ── */}
+              <div className="card" style={{padding:0,overflow:"hidden"}}>
+                <details>
+                  <summary style={{
+                    cursor:"pointer", fontFamily:"Syne,sans-serif", fontSize:12,
+                    fontWeight:700, textTransform:"uppercase", letterSpacing:"1px",
+                    color:"#8899b0", padding:"14px 18px", listStyle:"none",
+                    display:"flex", justifyContent:"space-between", alignItems:"center",
+                    borderBottom: archivedRequests.length>0 ? "1px solid #1e3a5f" : "none"
+                  }}>
+                    <span>📁 ΑΡΧΕΙΟ ΑΙΤΗΜΑΤΩΝ</span>
+                    <span style={{fontWeight:400,fontSize:11}}>({archivedRequests.length})</span>
+                  </summary>
+                  {archivedRequests.length===0
+                    ? <div className="empty" style={{padding:"16px 0"}}>Κανένα αρχειοθετημένο αίτημα</div>
+                    : <div style={{padding:"0 18px 10px"}}>
+                        {archivedRequests.map(r=>(
+                          <div key={r.id} style={{padding:"10px 0",borderBottom:"1px solid #1e3a5f22"}}>
+                            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+                              <span style={{fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.8px",color:theme.success,background:"rgba(34,197,94,0.15)",padding:"2px 8px",borderRadius:20}}>✓ Ολοκληρωθηκε</span>
+                              <span style={{fontSize:10,color:theme.textMuted}}>{r.salesUsername}</span>
+                            </div>
+                            <div style={{fontSize:13,fontWeight:600,color:theme.text,margin:"4px 0 2px"}}>{r.description}</div>
+                            <div style={{fontSize:11,color:theme.textMuted}}>
+                              {r.completedAt ? new Date(r.completedAt).toLocaleString("el-GR") : "—"}
+                            </div>
+                            {r.driverComment && <div style={{fontSize:12,color:theme.accent,fontStyle:"italic",marginTop:4}}>💬 {r.driverComment}</div>}
+                          </div>
+                        ))}
+                      </div>
+                  }
+                </details>
+              </div>
             </div>
           )}
 
@@ -1150,11 +1360,11 @@ function LoginPage({ onLogin }) {
           {error && <div className="login-error">{error}</div>}
           <div className="input-group">
             <label className="input-label">Username</label>
-            <input className="input" value={username} onChange={e=>setUsername(e.target.value)} placeholder="π.χ. driver1" autoFocus />
+            <input className="input" value={username} onChange={e=>setUsername(e.target.value)} autoFocus autoComplete="username" />
           </div>
           <div className="input-group">
             <label className="input-label">Password</label>
-            <input className="input" type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="••••••••" onKeyDown={e=>e.key==='Enter'&&handleLogin()} />
+            <input className="input" type="password" value={password} onChange={e=>setPassword(e.target.value)} autoComplete="current-password" onKeyDown={e=>e.key==='Enter'&&handleLogin()} />
           </div>
           <button className="btn btn-primary" onClick={handleLogin} disabled={loading}>{loading ? "Σύνδεση..." : "Είσοδος"}</button>
           <div style={{marginTop:10,fontSize:12,color:theme.textMuted,lineHeight:1.6}}>
@@ -1221,6 +1431,28 @@ function AdminPanel({ user, onLogout }) {
   const [driverActive, setDriverActive] = useState(null);
   const [driverProfile, setDriverProfile] = useState(null);
   const [routeFilters, setRouteFilters] = useState({client:"", month:"", year:""});
+  const [salesRequests, setSalesRequests] = useState([]);
+  const [showNewReq, setShowNewReq] = useState(false);
+  const [newReq, setNewReq] = useState({targetDriverId:"", description:""});
+  const salesPrevReqIds = useState(() => new Set())[0];
+
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, "requests"), snap => {
+      const all = snap.docs.map(d => d.data());
+      const mine = all.filter(r => r.salesUserId === user.id)
+        .sort((a,b) => b.createdAt - a.createdAt);
+      // notify sales when status changes (accepted/completed)
+      mine.forEach(r => {
+        const key = `${r.id}_${r.status}`;
+        if ((r.status==="accepted"||r.status==="completed") && !salesPrevReqIds.has(key)) {
+          playSoftNotifSound();
+        }
+        salesPrevReqIds.add(key);
+      });
+      setSalesRequests(mine);
+    });
+    return () => unsub();
+  }, []);
 
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "users"), snap => {
@@ -1302,6 +1534,14 @@ function AdminPanel({ user, onLogout }) {
                 <div className="big-btn-icon">🛰️</div>
                 <div className="big-btn-label">Δρομολόγια Live</div>
                 <div className="big-btn-sub">Ιστορικό, χάρτης, καύσιμα, service</div>
+              </button>
+              <button className="big-btn" style={{position:"relative"}} onClick={()=>setView("requests")}>
+                <div className="big-btn-icon">📋</div>
+                <div className="big-btn-label">Αιτήματα</div>
+                <div className="big-btn-sub">Αποστολή & παρακολούθηση</div>
+                {salesRequests.filter(r=>r.status==="pending").length > 0 && (
+                  <span className="notif-badge">{salesRequests.filter(r=>r.status==="pending").length}</span>
+                )}
               </button>
               <button className="big-btn" onClick={()=>setView("changepass")} style={{gridColumn: isAdmin ? "1 / -1" : "auto"}}>
                 <div className="big-btn-icon">🔑</div>
@@ -1443,6 +1683,82 @@ function AdminPanel({ user, onLogout }) {
           </div>
         )}
 
+
+        {view === "requests" && (
+          <div className="content">
+            {/* New Request Form */}
+            <div className="card">
+              <div className="section-title">📤 Νεο Αιτημα</div>
+              <div className="input-group">
+                <label className="input-label">Οδηγός</label>
+                <select className="select-input" style={{marginBottom:0}} value={newReq.targetDriverId}
+                  onChange={e=>setNewReq({...newReq,targetDriverId:e.target.value})}>
+                  <option value="">— Επίλεξε οδηγό —</option>
+                  <option value="all">📢 Όλοι οι οδηγοί</option>
+                  {driverAccounts.map(u=><option key={u.id} value={u.id}>{u.username}</option>)}
+                </select>
+              </div>
+              <div className="input-group">
+                <label className="input-label">Περιγραφή</label>
+                <textarea className="input" rows={3} style={{resize:"none",lineHeight:1.5}}
+                  placeholder="π.χ. Παράδοση στον πελάτη Παπαδόπουλο, Λεωφ. Αθηνών 12..."
+                  value={newReq.description}
+                  onChange={e=>setNewReq({...newReq,description:e.target.value})}></textarea>
+              </div>
+              <button className="btn btn-primary" onClick={async()=>{
+                if (!newReq.targetDriverId || !newReq.description.trim()) return alert("Συμπλήρωσε οδηγό και περιγραφή");
+                const id = Date.now();
+                try {
+                  await saveRequest({
+                    id, salesUserId:user.id, salesUsername:user.username,
+                    targetDriverId:newReq.targetDriverId,
+                    description:newReq.description.trim(),
+                    status:"pending", createdAt:id,
+                  });
+                  setNewReq({targetDriverId:"", description:""});
+                  alert("✅ Το αίτημα στάλθηκε!");
+                } catch(e) {
+                  console.error("saveRequest error:", e);
+                  alert("❌ Σφάλμα αποστολής: " + e.message + "\n\nΈλεγξε τα Firestore Security Rules.");
+                }
+              }}>📤 Αποστολή</button>
+            </div>
+
+            {/* Requests list */}
+            {salesRequests.length === 0
+              ? <div className="empty"><div className="empty-icon">📋</div>Δεν υπάρχουν αιτήματα</div>
+              : salesRequests.map(r => {
+                const driver = driverAccounts.find(u=>u.id===r.assignedDriverId);
+                return (
+                  <div key={r.id} className={`req-card req-${r.status}`}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
+                      <span className={`req-status req-status-${r.status}`}>
+                        {r.status==="pending"    && "⏳ Αναμονη"}
+                        {r.status==="accepted"   && <><span className="pulse-dot" style={{width:6,height:6}}/>Σε Εξελιξη</>}
+                        {r.status==="declined"   && "✗ Απορριφθηκε"}
+                        {r.status==="completed"  && "✓ Ολοκληρωθηκε"}
+                      </span>
+                      <button style={{background:"none",border:"none",cursor:"pointer",color:theme.textMuted,fontSize:16,padding:0,lineHeight:1}}
+                        onClick={()=>{if(window.confirm("Διαγραφή αιτήματος;"))deleteRequest(r.id);}}>🗑️</button>
+                    </div>
+                    <div className="req-desc">{r.description}</div>
+                    <div className="req-meta" style={{marginTop:4}}>
+                      {r.targetDriverId==="all" ? "📢 Όλοι οι οδηγοί" : `→ ${driverAccounts.find(u=>u.id===r.targetDriverId)?.username||r.targetDriverId}`}
+                      {" · "}{new Date(r.createdAt).toLocaleString("el-GR")}
+                    </div>
+                    {r.status==="accepted"||r.status==="completed" ? (
+                      <div style={{marginTop:6}}>
+                        <div className="req-meta">✋ {r.assignedDriverUsername||driver?.username}</div>
+                        {r.driverComment && <div className="req-comment">💬 {r.driverComment}</div>}
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })
+            }
+            <button className="btn btn-secondary" onClick={()=>setView('home')}>← Πίσω</button>
+          </div>
+        )}
 
         {view === "changepass" && (
           <div className="content">
