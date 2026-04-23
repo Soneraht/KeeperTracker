@@ -150,7 +150,7 @@ const css = `
   .req-status-completed{background:rgba(34,197,94,0.2);color:${theme.success}}
   .req-desc{font-size:14px;color:${theme.text};margin:8px 0 4px;font-weight:600;line-height:1.4}
   .req-meta{font-size:11px;color:${theme.textMuted}}
-  .req-comment{font-size:12px;color:${theme.accent};margin-top:6px;font-style:italic}
+  .req-comment{font-size:12px;color:${theme.accent};margin-top:6px;font-style:italic;word-break:break-word;overflow-wrap:break-word;white-space:pre-wrap;max-width:100%}
   .notif-badge{position:absolute;top:-4px;right:-4px;background:${theme.danger};color:#fff;border-radius:50%;width:16px;height:16px;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center}
 `;
 
@@ -572,10 +572,11 @@ function DriverApp({ user, onLogout }) {
 
       // Active (non-archived) requests for this driver shown in record tab
       const mine = all.filter(r =>
-        (r.targetDriverId === uid || r.targetDriverId === "all") &&
-        r.status !== "declined" &&
-        !r.archived
-      ).sort((a,b) => b.createdAt - a.createdAt);
+  (r.targetDriverId === uid || r.targetDriverId === 'all')
+  && r.status !== 'declined'
+  && !r.archived
+  && !(r.targetDriverId === 'all' && (r.declinedBy || []).includes(uid))
+).sort((a,b) => b.createdAt - a.createdAt);
 
       // Archived completed requests shown in profile
       const archived = all.filter(r =>
@@ -878,9 +879,24 @@ function DriverApp({ user, onLogout }) {
                               await updateRequest(r.id,{status:"accepted",driverComment:reqComment[r.id]||"",assignedDriverId:uid,assignedDriverUsername:user.username,respondedAt:Date.now()});
                               setReqComment({...reqComment,[r.id]:""});
                             }}>✓ Αποδοχή</button>
-                            <button className="btn btn-danger btn-sm" style={{flex:1}} onClick={async()=>{
-                              await updateRequest(r.id,{status:"declined",assignedDriverId:uid,respondedAt:Date.now()});
-                            }}>✗ Άρνηση</button>
+                            <button className="btn btn-danger btn-sm" style={{flex:1}} onClick={async () => {
+  if (r.targetDriverId === 'all') {
+    const updatedDeclinedBy = [...(r.declinedBy || []), uid];
+    const usersSnap = await getDocs(collection(db, 'users'));
+    const totalDrivers = usersSnap.docs.filter(d => d.data().role === 'driver').length;
+    const allDeclined = updatedDeclinedBy.length >= totalDrivers;
+    await updateRequest(r.id, {
+      declinedBy: updatedDeclinedBy,
+      ...(allDeclined ? { status: 'declined', respondedAt: Date.now() } : {})
+    });
+  } else {
+    await updateRequest(r.id, {
+      status: 'declined',
+      assignedDriverId: uid,
+      respondedAt: Date.now()
+    });
+  }
+}}>✗ Άρνηση</button>
                           </div>
                         </div>
                       )}
