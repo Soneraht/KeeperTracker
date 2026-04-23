@@ -148,10 +148,19 @@ const css = `
   .req-status-accepted{background:rgba(29,110,245,0.2);color:${theme.accent}}
   .req-status-declined{background:rgba(239,68,68,0.2);color:${theme.danger}}
   .req-status-completed{background:rgba(34,197,94,0.2);color:${theme.success}}
-  .req-desc{font-size:14px;color:${theme.text};margin:8px 0 4px;font-weight:600;line-height:1.4}
-  .req-meta{font-size:11px;color:${theme.textMuted}}
-  .req-comment{font-size:12px;color:${theme.accent};margin-top:6px;font-style:italic;word-break:break-word;overflow-wrap:break-word;white-space:pre-wrap;max-width:100%}
-  .notif-badge{position:absolute;top:-4px;right:-4px;background:${theme.danger};color:#fff;border-radius:50%;width:16px;height:16px;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.req-desc {font-size: 14px;  color: ${theme.text};  margin: 8px 0 4px;  font-weight: 500;  line-height: 1.6;  word-break: break-word;  overflow-wrap: break-word;  white-space: pre-wrap;  width: 100%;  display: block;}  
+.req-meta{font-size:11px;color:${theme.textMuted}}
+.req-comment {
+  font-size: 12px;
+  color: ${theme.accent};
+  margin-top: 6px;
+  font-style: italic;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  white-space: pre-wrap;
+  width: 100%;
+  display: block;
+}  .notif-badge{position:absolute;top:-4px;right:-4px;background:${theme.danger};color:#fff;border-radius:50%;width:16px;height:16px;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center}
 `;
 
 // ─── Firebase helpers ─────────────────────────────────────────────
@@ -1716,7 +1725,7 @@ function AdminPanel({ user, onLogout }) {
               </div>
               <div className="input-group">
                 <label className="input-label">Περιγραφή</label>
-                <textarea className="input" rows={3} style={{resize:"none",lineHeight:1.5}}
+                <textarea className="input" rows={3} style={{ resize: 'none', lineHeight: 1.5, width: '100%', boxSizing: 'border-box' }}
                   placeholder="π.χ. Παράδοση στον πελάτη Παπαδόπουλο, Λεωφ. Αθηνών 12..."
                   value={newReq.description}
                   onChange={e=>setNewReq({...newReq,description:e.target.value})}></textarea>
