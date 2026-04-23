@@ -1725,12 +1725,26 @@ function AdminPanel({ user, onLogout }) {
                 if (!newReq.targetDriverId || !newReq.description.trim()) return alert("Συμπλήρωσε οδηγό και περιγραφή");
                 const id = Date.now();
                 try {
-                  await saveRequest({
-                    id, salesUserId:user.id, salesUsername:user.username,
-                    targetDriverId:newReq.targetDriverId,
-                    description:newReq.description.trim(),
-                    status:"pending", createdAt:id,
-                  });
+                  if (newReq.targetDriverId === 'all') {
+  // Δημιούργησε ξεχωριστό document για κάθε οδηγό
+  for (const driver of driverAccounts) {
+    const rid = Date.now() + Math.random();
+    await saveRequest({
+      id: rid, salesUserId: user.id, salesUsername: user.username,
+      targetDriverId: driver.id,        // συγκεκριμένος οδηγός
+      groupId: String(id),              // κοινό group ID για αναφορά
+      description: newReq.description.trim(),
+      status: 'pending', createdAt: id,
+    });
+  }
+} else {
+  await saveRequest({
+    id, salesUserId: user.id, salesUsername: user.username,
+    targetDriverId: newReq.targetDriverId,
+    description: newReq.description.trim(),
+    status: 'pending', createdAt: id,
+  });
+};
                   setNewReq({targetDriverId:"", description:""});
                   alert("✅ Το αίτημα στάλθηκε!");
                 } catch(e) {
